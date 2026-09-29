@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 
 DEFAULT_MISTRAL_MODEL = "mistral-small-latest"
 DEFAULT_GOOGLE_GENAI_MODEL = "gemini-2.5-flash"
+DEFAULT_GOOGLE_CREDENTIALS_FILE = "ai.json"
+DEFAULT_GOOGLE_CLOUD_LOCATION = "us-central1"
 
 
 class ConfigurationError(RuntimeError):
@@ -25,6 +27,9 @@ class Settings:
     google_genai_api_key: str
     google_genai_model: str
 
+    google_credentials_file: str
+    google_cloud_location: str
+
     log_level: str
 
     @classmethod
@@ -33,11 +38,18 @@ class Settings:
 
         mistral_api_key = os.getenv("MISTRAL_API_KEY", "").strip()
         google_genai_api_key = os.getenv("GOOGLE_GENAI_API_KEY", "").strip()
+        google_credentials_file = (
+            os.getenv(
+                "GOOGLE_CREDENTIALS_FILE",
+                DEFAULT_GOOGLE_CREDENTIALS_FILE,
+            ).strip()
+            or DEFAULT_GOOGLE_CREDENTIALS_FILE
+        )
 
-        if not mistral_api_key and not google_genai_api_key:
+        if not os.path.isfile(google_credentials_file):
             raise ConfigurationError(
-                "At least one API key must be configured. "
-                "Set MISTRAL_API_KEY or GOOGLE_GENAI_API_KEY in your .env file."
+                f"Google service account file not found: {google_credentials_file}. "
+                "Place it in the project root or set GOOGLE_CREDENTIALS_FILE."
             )
 
         return cls(
@@ -53,6 +65,14 @@ class Settings:
                     DEFAULT_GOOGLE_GENAI_MODEL,
                 ).strip()
                 or DEFAULT_GOOGLE_GENAI_MODEL
+            ),
+            google_credentials_file=google_credentials_file,
+            google_cloud_location=(
+                os.getenv(
+                    "GOOGLE_CLOUD_LOCATION",
+                    DEFAULT_GOOGLE_CLOUD_LOCATION,
+                ).strip()
+                or DEFAULT_GOOGLE_CLOUD_LOCATION
             ),
             log_level=os.getenv(
                 "LOG_LEVEL",
