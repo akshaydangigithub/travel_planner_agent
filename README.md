@@ -14,16 +14,22 @@ START
               ┌───────────┴───────────┐
          ask_user                continue_plan
               │                        │
-     (back to parse_request)   ┌───────┼───────┬────────────────┐
-                        flight_research  search_hotels  search_weather  search_activities
-                               └───────┴───────┴────────────────┘
+     (back to parse_request)   ┌───────┼────────┬─────────────┐
+                        flight_research  hotel_research  weather_research  activity_research
+                               └───────┴────────┴─────────────┘
                                           │
-                                   combine_research ──> END
+                                   combine_research
+                                          │
+                                   itinerary_agent ──> validate_itinerary ──> END
+                                          ↑                    │ invalid
+                                          └── replan_itinerary ┘ (max 2 attempts)
 ```
 
-`flight_research` is a subgraph: a tool-calling agent that invokes the
-`search_flights` tool, extracts the results into `FlightResult` models, and
-loops back to the agent to summarise them.
+Each `*_research` node runs its own tool-calling subgraph, built from one
+shared factory (`app/graph/subgraphs/research_agent/`) and a small
+per-agent `ResearchAgentSpec`. Each subgraph keeps a private message history,
+and only its typed result (`flights`, `hotels`, `weather`, `activities`)
+is written back to `TravelState`.
 
 ## Layout
 
@@ -31,29 +37,21 @@ loops back to the agent to summarise them.
 app/
 ├── cli.py                     entrypoint: build state, run the graph, report
 ├── core/                      settings, logging, LLM factory, console I/O
-│   ├── config.py              environment-backed Settings
-│   ├── console.py             the only place that uses print/input
-│   ├── llm.py                 shared ChatMistralAI instance
-│   └── logging.py             logging setup
 ├── graph/
 │   ├── builder.py             top level graph assembly
 │   ├── constants.py           node and route names
 │   ├── routers.py             conditional edges
 │   ├── state.py               TravelState + initial_state()
 │   ├── nodes/                 one module per stage of the flow
-│   │   ├── parsing.py         parse_request
-│   │   ├── validation.py      validate_requirements
-│   │   ├── interaction.py     ask_user, continue_plan
-│   │   ├── research.py        search_hotels, search_weather, search_activities
-│   │   └── aggregation.py     combine_research
-│   └── subgraphs/flights/     flight research subgraph
-│       ├── agent.py           tool-bound agent node
-│       ├── builder.py         subgraph assembly
-│       ├── nodes.py           extract_flights
-│       └── routers.py         tools vs. end
+│   └── subgraphs/
+│       ├── research_agent/    shared agent → tools → extract subgraph
+│       ├── flights/           flight agent spec
+│       ├── hotels/            hotel agent spec
+│       ├── weather/           weather agent spec
+│       └── activities/        activity agent spec
 ├── prompts/                   prompt text, kept out of the node logic
 ├── schemas/                   pydantic models
-└── tools/                     LangChain tools available to the agents
+└── tools/                     LangChain tools available to the agents (mock data)
 ```
 
 ## Setup
@@ -62,13 +60,15 @@ app/
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-cp .env.example .env      # then fill in MISTRAL_API_KEY
+cp .env.example .env      # then fill in GOOGLE_GENAI_API_KEY
 ```
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `MISTRAL_API_KEY` | yes | — | Mistral credentials |
-| `MISTRAL_MODEL` | no | `mistral-small-latest` | chat model to use |
+| `GOOGLE_GENAI_API_KEY` | yes | — | Gemini credentials (active provider) |
+| `GOOGLE_GENAI_MODEL` | no | `gemini-2.5-flash` | chat model to use |
+| `MISTRAL_API_KEY` | no | — | Mistral credentials (not currently used) |
+| `MISTRAL_MODEL` | no | `mistral-small-latest` | Mistral chat model |
 | `LOG_LEVEL` | no | `INFO` | root log level |
 
 ## Run

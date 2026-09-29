@@ -3,7 +3,14 @@
 from operator import add
 from typing import Annotated, TypedDict
 
-from app.schemas import FlightResult, Itinerary, TravelRequirements
+from app.schemas import (
+    ActivityResult,
+    FlightResult,
+    HotelResult,
+    Itinerary,
+    TravelRequirements,
+    WeatherReport,
+)
 
 
 class TravelState(TypedDict):
@@ -11,17 +18,20 @@ class TravelState(TypedDict):
     user_feedback: str
 
     requirements: TravelRequirements | None
-
     validation_errors: list[str]
 
     flights: list[FlightResult]
-    hotels: list
-    weather: dict
-    activities: list
+    hotels: list[HotelResult]
+    weather: WeatherReport | None
+    activities: list[ActivityResult]
 
     itinerary: Itinerary | None
+    itinerary_errors: list[str]
+    replan_count: int
 
-    messages: Annotated[list, add]
+    # Human readable run log. Agent conversations live in each research
+    # subgraph's own state and never reach this graph.
+    progress: Annotated[list[str], add]
 
 
 def initial_state(user_request: str) -> TravelState:
@@ -32,6 +42,12 @@ def initial_state(user_request: str) -> TravelState:
         "user_feedback": "",
         "requirements": None,
         "validation_errors": [],
-        "itinerary": {},
-        "messages": [],
+        "flights": [],
+        "hotels": [],
+        "weather": None,
+        "activities": [],
+        "itinerary": None,
+        "itinerary_errors": [],
+        "replan_count": 0,
+        "progress": [],
     }

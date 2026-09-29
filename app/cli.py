@@ -6,7 +6,7 @@ from app.core.logging import configure_logging
 from app.graph import initial_state, travel_graph
 
 DEFAULT_REQUEST = (
-    "Plan a 7 day trip to Japan from Delhi "
+    "Plan a trip to Japan"
     "for 2 people. My budget is ₹2 lakh. "
     "I like food, nature and photography."
 )
@@ -19,9 +19,23 @@ def run(user_request: str = DEFAULT_REQUEST) -> dict:
 
 
 def report(result: dict) -> None:
-    """Print the messages collected during the run and the final state."""
+    """Print the run log followed by the itinerary or why it failed."""
 
-    show(str(result))
+    show("Progress:")
+
+    for entry in result["progress"]:
+        show(f"- {entry}")
+
+    if result["itinerary_errors"]:
+        show("\nItinerary failed validation:")
+
+        for error in result["itinerary_errors"]:
+            show(f"- {error}")
+
+    itinerary = result["itinerary"]
+
+    if itinerary is not None:
+        show(f"\n{itinerary.model_dump_json(indent=2)}")
 
 
 def main() -> None:

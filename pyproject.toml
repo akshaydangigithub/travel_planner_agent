@@ -11,6 +11,7 @@ dependencies = [
     "langgraph",
     "langchain-core",
     "langchain-mistralai",
+    "langchain-google-genai",
     "python-dotenv",
     "pydantic",
     "typing-extensions",

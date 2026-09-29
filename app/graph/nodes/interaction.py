@@ -7,7 +7,7 @@ from app.graph.state import TravelState
 logger = get_logger(__name__)
 
 
-def ask_user(state: TravelState) -> TravelState:
+def ask_user(state: TravelState) -> dict:
     """Report the validation errors and collect a correction."""
 
     show("Requirements are incomplete.")
@@ -18,12 +18,12 @@ def ask_user(state: TravelState) -> TravelState:
 
     feedback = prompt("\nPlease provide corrected information: ")
 
-    return {**state, "user_feedback": feedback}
+    return {"user_feedback": feedback}
 
 
-def continue_plan(state: TravelState) -> TravelState:
+def continue_plan(state: TravelState) -> dict:
     """Fan out into the research branches once requirements are valid."""
 
     logger.info("Requirements are valid. Continuing with travel planning...")
 
-    return state
+    return {"progress": ["Requirements validated."]}

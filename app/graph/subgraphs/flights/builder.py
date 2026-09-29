@@ -1,40 +1,25 @@
-"""Assembly of the flight research subgraph."""
+"""The flight research agent: a spec for the shared research subgraph."""
 
-from langgraph.graph import END, START, StateGraph
-from langgraph.prebuilt import ToolNode
-
-from app.graph.constants import FlightNode, FlightRoute
-from app.graph.state import TravelState
-from app.graph.subgraphs.flights.agent import flight_agent
-from app.graph.subgraphs.flights.nodes import extract_flights
-from app.graph.subgraphs.flights.routers import route_flight_agent
+from app.graph.subgraphs.research_agent import (
+    ResearchAgentSpec,
+    build_research_agent,
+    make_research_node,
+)
+from app.prompts.flight_research import (
+    FLIGHT_AGENT_SYSTEM_PROMPT,
+    build_flight_request_prompt,
+)
+from app.schemas import FlightResult
 from app.tools import FLIGHT_TOOLS
 
+FLIGHT_AGENT = ResearchAgentSpec(
+    name="flight",
+    result_key="flights",
+    system_prompt=FLIGHT_AGENT_SYSTEM_PROMPT,
+    build_request_prompt=build_flight_request_prompt,
+    tools=FLIGHT_TOOLS,
+    result_type=list[FlightResult],
+)
 
-def build_flight_graph():
-    """Wire the flight agent, its tools and the result extraction together."""
-
-    builder = StateGraph(TravelState)
-
-    builder.add_node(FlightNode.AGENT, flight_agent)
-    builder.add_node(FlightNode.TOOLS, ToolNode(FLIGHT_TOOLS))
-    builder.add_node(FlightNode.EXTRACT_FLIGHTS, extract_flights)
-
-    builder.add_edge(START, FlightNode.AGENT)
-
-    builder.add_conditional_edges(
-        FlightNode.AGENT,
-        route_flight_agent,
-        {
-            FlightRoute.TOOLS: FlightNode.TOOLS,
-            FlightRoute.END: END,
-        },
-    )
-
-    builder.add_edge(FlightNode.TOOLS, FlightNode.EXTRACT_FLIGHTS)
-    builder.add_edge(FlightNode.EXTRACT_FLIGHTS, FlightNode.AGENT)
-
-    return builder.compile()
-
-
-flight_graph = build_flight_graph()
+flight_graph = build_research_agent(FLIGHT_AGENT)
+flight_research = make_research_node(FLIGHT_AGENT, flight_graph)

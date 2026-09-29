@@ -3,13 +3,13 @@
 from app.core.llm import get_llm
 from app.core.logging import get_logger
 from app.graph.state import TravelState
-from app.prompts.planning import build_requirements_prompt
+from app.prompts.planning import REQUIREMENTS_SYSTEM_PROMPT, build_requirements_prompt
 from app.schemas import TravelRequirements
 
 logger = get_logger(__name__)
 
 
-def parse_request(state: TravelState) -> TravelState:
+def parse_request(state: TravelState) -> dict:
     """Extract travel requirements from the request and any user correction."""
 
     logger.info("Parsing travel request...")
@@ -21,9 +21,8 @@ def parse_request(state: TravelState) -> TravelState:
         state["user_feedback"],
     )
 
-    requirements = structured_llm.invoke(prompt)
+    requirements = structured_llm.invoke(
+        [("system", REQUIREMENTS_SYSTEM_PROMPT), ("human", prompt)]
+    )
 
-    return {
-        **state,
-        "requirements": requirements,
-    }
+    return {"requirements": requirements}

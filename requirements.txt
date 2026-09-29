@@ -4,3 +4,4 @@ langchain-mistralai
 python-dotenv
 pydantic
 typing-extensions
+langchain-google-genai

@@ -1,5 +1,5 @@
 """Flight research subgraph: a tool calling agent that returns flight options."""
 
-from app.graph.subgraphs.flights.builder import build_flight_graph, flight_graph
+from app.graph.subgraphs.flights.builder import FLIGHT_AGENT, flight_graph, flight_research
 
-__all__ = ["build_flight_graph", "flight_graph"]
+__all__ = ["FLIGHT_AGENT", "flight_graph", "flight_research"]
