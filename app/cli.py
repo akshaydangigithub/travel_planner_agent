@@ -6,9 +6,10 @@ from app.core.logging import configure_logging
 from app.graph import initial_state, travel_graph
 
 DEFAULT_REQUEST = (
-    "Plan a trip to Japan"
-    "for 2 people. My budget is ₹2 lakh. "
-    "I like food, nature and photography."
+    "Plan a trip to Dubai from India"
+    "for 2 people. My budget is ₹40,000/-. "
+    "I like food, nature and photography.",
+    "My flight is alreay booked",
 )
 
 

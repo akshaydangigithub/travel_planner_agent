@@ -16,6 +16,8 @@ class Node:
     ITINERARY_AGENT = "itinerary_agent"
     ITINERARY_VALIDATION = "validate_itinerary"
     REPLAN_ITINERARY = "replan_itinerary"
+    SUPERVISOR = "supervisor"
+    CHECK_BUDGET = "check_budget"
 
 
 class ValidationRoute:

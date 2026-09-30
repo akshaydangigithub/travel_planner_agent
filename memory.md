@@ -1,15 +1,53 @@
-# Travel Planner Agent --- Project Memory
+# Travel Planner Agent — Project Memory + Tutor Brief
 
-> Last update: 2026-09-29 This file is the single source of truth for
-> the current Travel Planner Agent project. Update it after every
+> Last update: 2026-09-30.
+> Single source of truth for the project. Update it after every
 > meaningful implementation step.
+>
+> **This file is self-contained.** To continue learning in another chat
+> (e.g. ChatGPT), paste the whole file and send it. Section 0 tells the
+> assistant how to behave.
+
+------------------------------------------------------------------------
+
+## 0. Instructions for the AI assistant reading this (START HERE)
+
+You are a **senior AI engineer mentoring a junior developer** who is
+learning **LangGraph** by building a production-level Travel Planner
+Agent. Everything below is the current project state. Continue from
+**§17 (Next session)**.
+
+How to teach:
+
+-   Begin by briefly confirming where we are (2–3 lines), then go
+    straight to the next step. Do not re-teach concepts in §5.
+-   Introduce **one new LangGraph concept at a time**; keep theory short
+    (a few paragraphs), spend most of the time implementing in this
+    project.
+-   Explain *why* a design decision is made (production patterns over
+    toy shortcuts).
+-   Give complete, paste-ready code with file paths that follow the
+    package rules in §4. Do not dump the whole project; change only what
+    is needed and preserve working code.
+-   After each meaningful step, tell the user exactly what to run and
+    what output to expect, and let them run it. Debug real errors they
+    paste; do not jump to unrelated architecture.
+-   End each step with one short comprehension question, and remind the
+    user to update this file (provide the updated sections).
+-   Avoid FastAPI / databases / Redis / auth / real APIs until their
+    turn in the roadmap (§2).
+
+Code conventions (must follow): keep prompts out of nodes; no
+`print`/`input` in graph code except `app/core/console.py`; node names
+live in `app/graph/constants.py`; nodes return **only the keys they
+change** (never `{**state}`); deterministic Python for validation, LLM
+only where judgement/extraction is needed.
 
 ------------------------------------------------------------------------
 
 ## 1. Project Goal
 
-We are building a **production-level Travel Planner Agent from scratch
-using LangGraph**.
+Build a **production-level Travel Planner Agent with LangGraph**.
 
 Example request:
 
@@ -19,276 +57,121 @@ Example request:
 Final system goals:
 
 1.  Extract structured travel requirements.
-2.  Validate requirements.
-3.  Ask for missing/invalid information.
-4.  Research flights, hotels, weather, and activities.
-5.  Run independent research branches in parallel.
-6.  Use specialized agents/tools.
-7.  Aggregate research.
-8.  Generate a structured day-by-day itinerary.
-9.  Validate the itinerary.
-10. Replan when validation fails.
-11. Add human approval.
-12. Persist checkpoints/state.
-13. Maintain useful long-term user memory.
-14. Stream progress/results.
-15. Expose through FastAPI.
-16. Add caching, authentication, observability, real APIs, and
-    production error handling.
-
-We are learning LangGraph by implementing each concept directly inside
-this project.
+2.  Validate requirements; ask for missing/invalid info.
+3.  Research flights, hotels, weather, activities (parallel, specialised
+    agents with tools).
+4.  Aggregate research, check budget, re-research if needed.
+5.  Generate a structured day-by-day itinerary; validate; replan.
+6.  Human approval, checkpoints/persistence, long-term user memory,
+    streaming.
+7.  FastAPI, caching, auth, observability, real APIs, production error
+    handling.
 
 ------------------------------------------------------------------------
 
-## 2. Current Learning / Build Order
+## 2. Roadmap
 
 ``` text
-LangGraph Fundamentals
-        ↓
-Travel Requirement Workflow
-        ↓
-Validation + Conditional Routing
-        ↓
-Cycles / Human Feedback
-        ↓
-Parallel Research
-        ↓
-Reducers
-        ↓
-Tools + Tool Calling
-        ↓
-Agent Loops
-        ↓
-Subgraphs
-        ↓
-Parallel Subgraphs / Fan-out + Fan-in
-        ↓
-Structured Research State
-        ↓
-Production Code Structure              ✅
-        ↓
-Itinerary Generation                   ✅
-        ↓
-Itinerary Validation                   ✅
-        ↓
-Replanning Cycle + Retry Guard         ✅
-        ↓
-Hotel / Weather / Activity Agents      ✅
-        ↓
-Split Agent Messages (private state)   ✅
-        ↓
-Supervisor / Multi-Agent Architecture  NEXT
-        ↓
-Human-in-the-Loop
-        ↓
-Checkpointing / Persistence
-        ↓
-Long-Term User Memory
-        ↓
-Streaming
-        ↓
-Tests
-        ↓
-FastAPI
-        ↓
-PostgreSQL / Redis
-        ↓
-Real Travel APIs
-        ↓
-Observability / LangSmith
-        ↓
-Production Hardening
+LangGraph fundamentals → requirement workflow → validation + routing
+→ cycles / human feedback → parallel research → reducers → tools
+→ agent loops → subgraphs → fan-out/fan-in → production structure   ✅
+→ itinerary generation / validation / replanning + retry guard       ✅
+→ hotel / weather / activity agents, shared agent factory            ✅
+→ private subgraph state (split messages)                            ✅
+→ supervisor + Send dispatch                                         ✅
+→ budget check + targeted re-research + Command                      ✅ (built, see §17)
+→ Human-in-the-Loop (interrupt)                                      NEXT
+→ Checkpointing / persistence
+→ Long-term user memory (Store)
+→ Streaming
+→ Tests
+→ FastAPI → PostgreSQL / Redis → real travel APIs
+→ Observability / LangSmith → production hardening
 ```
 
 ------------------------------------------------------------------------
 
-## 3. Current Stack
+## 3. Stack
 
--   Python 3.12
--   LangGraph
--   LangChain Core
--   Google Gemini through `ChatGoogleGenerativeAI`
--   Current model: `gemini-2.5-flash`
--   Mistral integration remains in settings/dependencies but is not the
-    active provider
--   Pydantic
--   python-dotenv
--   typing-extensions
+-   Python 3.12, LangGraph 1.2.x, LangChain Core
+-   Google Gemini via `ChatGoogleGenerativeAI` on **Vertex AI** (service
+    account credentials file), model `gemini-2.5-flash`
+-   Mistral remains in settings/deps but is not the active provider
+-   Pydantic, python-dotenv, typing-extensions
 
-Current `requirements.txt` includes:
+`requirements.txt`: langgraph, langchain-core, langchain-mistralai,
+langchain-google-genai, python-dotenv, pydantic, typing-extensions.
 
-``` text
-langgraph
-langchain-core
-langchain-mistralai
-langchain-google-genai
-python-dotenv
-pydantic
-typing-extensions
-```
+`grandalf` is not installed, so `draw_ascii()` fails; use
+`graph.get_graph().draw_mermaid()`.
 
-Packaging/docs: `requirements.txt`, `pyproject.toml`, `.env.example`
-and README all document Google Gemini as the active provider (fixed
-2026-09-29). `grandalf` is not installed, so `draw_ascii()` fails; use
-`draw_mermaid()` or install it if a graph picture is needed.
-
-Not introduced yet:
-
--   FastAPI
--   PostgreSQL
--   Redis
--   LangSmith
--   Authentication
--   Real travel APIs
--   Production deployment
+Not introduced yet: FastAPI, PostgreSQL, Redis, LangSmith, auth, real
+travel APIs, deployment.
 
 ------------------------------------------------------------------------
 
-## 4. Current Project Structure
+## 4. Project Structure
 
 ``` text
 travel_planner/
-│
-├── main.py                         thin launcher → app.cli:main
-├── pyproject.toml
-├── requirements.txt
-├── README.md
-├── memory.md                       ← this file
-├── .env
-├── .env.example
-│
+├── main.py                  thin launcher → app.cli:main
+├── pyproject.toml, requirements.txt, README.md, .env, .env.example
+├── memory.md                ← this file
 └── app/
-    ├── __init__.py
-    ├── cli.py                      run + readable report (progress, itinerary)
-    │
-    ├── core/
-    │   ├── config.py
-    │   ├── llm.py
-    │   ├── logging.py
-    │   └── console.py
-    │
+    ├── cli.py               run + readable report
+    ├── core/                config.py, llm.py (get_llm), logging.py, console.py (show/prompt)
     ├── graph/
-    │   ├── state.py                TravelState + initial_state()
-    │   ├── constants.py            Node, ValidationRoute, ItineraryRoute,
-    │   │                           ResearchAgentNode, ResearchAgentRoute
-    │   ├── routers.py
-    │   ├── builder.py
-    │   │
+    │   ├── state.py         TravelState + initial_state()
+    │   ├── constants.py     Node, ValidationRoute, ItineraryRoute,
+    │   │                    ResearchAgentNode, ResearchAgentRoute
+    │   ├── routers.py       route_after_validation, route_after_itinerary_validation,
+    │   │                    route_research_agents
+    │   ├── builder.py       build_travel_graph() → travel_graph
     │   ├── nodes/
-    │   │   ├── parsing.py
-    │   │   ├── validation.py
-    │   │   ├── interaction.py
-    │   │   ├── aggregation.py
-    │   │   ├── itinerary.py
-    │   │   ├── itinerary_validation.py
-    │   │   └── replanning.py
-    │   │
+    │   │   parsing.py  supervisor.py  validation.py  interaction.py
+    │   │   aggregation.py  budget.py  itinerary.py
+    │   │   itinerary_validation.py  replanning.py
     │   └── subgraphs/
-    │       ├── __init__.py         exports the 4 *_research parent nodes
-    │       ├── research_agent/     shared, reusable agent subgraph
-    │       │   ├── state.py        ResearchAgentState (private messages)
-    │       │   ├── spec.py         ResearchAgentSpec dataclass
-    │       │   ├── nodes.py        make_agent_node, make_extract_node
-    │       │   ├── routers.py      route_agent, route_after_extract
-    │       │   └── builder.py      build_research_agent, make_research_node
-    │       ├── flights/builder.py  FLIGHT_AGENT spec → flight_graph, flight_research
-    │       ├── hotels/builder.py   HOTEL_AGENT spec → hotel_graph, hotel_research
-    │       ├── weather/builder.py  WEATHER_AGENT spec → weather_graph, weather_research
-    │       └── activities/builder.py ACTIVITY_AGENT spec → activity_graph, activity_research
-    │
-    ├── prompts/
-    │   ├── planning.py
-    │   ├── flight_research.py
-    │   ├── hotel_research.py
-    │   ├── weather_research.py
-    │   ├── activity_research.py
-    │   └── itinerary.py            renders research as JSON
-    │
-    ├── schemas/
-    │   ├── requirements.py         TravelRequirements
-    │   ├── flights.py              FlightResult
-    │   ├── hotels.py               HotelResult
-    │   ├── weather.py              WeatherReport
-    │   ├── activities.py           ActivityResult
-    │   └── itinerary.py            Itinerary, ItineraryDay
-    │
-    └── tools/                      all mock data
-        ├── flights.py              search_flights       → FLIGHT_TOOLS
-        ├── hotels.py               search_hotels        → HOTEL_TOOLS
-        ├── weather.py              get_weather_forecast → WEATHER_TOOLS
-        └── activities.py           search_activities    → ACTIVITY_TOOLS
+    │       research_agent/  state.py spec.py nodes.py routers.py builder.py   (shared factory)
+    │       flights/ hotels/ weather/ activities/   each: builder.py with a ResearchAgentSpec
+    ├── prompts/     planning, flight_research, hotel_research, weather_research,
+    │                activity_research, itinerary
+    ├── schemas/     requirements, flights, hotels, weather, activities, itinerary
+    └── tools/       flights, hotels, weather, activities   (all MOCK data, INR)
 ```
 
-The old `flights/agent.py`, `flights/nodes.py`, `flights/routers.py` and
-`nodes/research.py` were removed; the factory replaces them.
+Package rules:
 
-### Package rules
+| Adding | Location |
+|---|---|
+| Graph node | `app/graph/nodes/<stage>.py` (export in `nodes/__init__.py`) |
+| Router | `app/graph/routers.py` or subgraph router |
+| Node/route constant | `app/graph/constants.py` |
+| New research agent | `ResearchAgentSpec` in `app/graph/subgraphs/<name>/builder.py` |
+| Pydantic model | `app/schemas/<concept>.py` |
+| Prompt | `app/prompts/<area>.py` |
+| Tool | `app/tools/<area>.py` |
+| Setting/env var | `app/core/config.py` + `.env.example` |
+| User I/O | `app/core/console.py` |
+| Progress output | logger + `progress` state entry |
 
-  Adding                Location
-  --------------------- -------------------------------------------
-  Graph node            `app/graph/nodes/<stage>.py`
-  Router                `app/graph/routers.py` or subgraph router
-  Node/route constant   `app/graph/constants.py`
-  New research agent    `ResearchAgentSpec` in `app/graph/subgraphs/<name>/builder.py`
-  Pydantic model        `app/schemas/<concept>.py`
-  Prompt                `app/prompts/<area>.py`
-  Tool                  `app/tools/<area>.py`
-  Setting/env var       `app/core/config.py` + `.env.example`
-  User I/O              `app/core/console.py`
-  Progress output       logger + `progress` state entry
-
-Keep dependencies flowing inward:
-
-``` text
-core      → cross-cutting concerns
-schemas   → pure data contracts
-tools     → capabilities
-prompts   → prompt text
-graph     → orchestration
-cli       → driver
-```
+Dependencies flow inward: core → schemas → tools → prompts → graph → cli.
 
 ------------------------------------------------------------------------
 
-## 5. Completed LangGraph Concepts
+## 5. Concepts Already Learned (do not re-teach unless debugging)
 
-Already learned and implemented:
-
--   State / `TypedDict`
--   Nodes
--   `StateGraph`
--   `START`, `END`
--   `add_node()`
--   `add_edge()`
--   `add_conditional_edges()`
--   Structured LLM output
--   Deterministic validation
--   Conditional routing
--   Cycles
--   Parallel research / fan-out
--   Fan-in synchronization
--   Reducers
--   Tools
--   `bind_tools()`
--   `ToolNode`
--   Agent tool loops
--   Tool-loop debugging
--   Structured Pydantic results
--   Subgraphs
--   Compiled subgraph used as a node
--   Production package structure
--   Itinerary generation
--   Itinerary validation
--   Controlled replanning cycle
--   Retry guard
--   Subgraph with its own private state schema
--   Invoking a subgraph from a node (explicit input/output mapping)
--   Node/subgraph factories driven by a spec
--   `add_messages` reducer
--   Fan-in with a single list edge `add_edge([a, b, c], d)`
-
-Do not repeat these concepts unless needed for debugging.
+State/`TypedDict`, nodes, `StateGraph`, `START`/`END`, `add_node`,
+`add_edge`, `add_conditional_edges`, structured LLM output
+(`with_structured_output`), deterministic validation, conditional
+routing, cycles, parallel fan-out/fan-in, reducers (`Annotated[..., add]`,
+`add_messages`), tools, `bind_tools`, `ToolNode`, agent tool loops,
+subgraphs (compiled graph as node, private state schema, invoking from a
+node with explicit input/output mapping), spec-driven node/subgraph
+factories, supervisor pattern, dynamic fan-out with `Send`, why list
+edges break with optional branches, controlled replanning + retry guard,
+**`Command(update=..., goto=...)` including `goto=[Send(...)]`** (built
+2026-09-30; user still to confirm it works against Gemini).
 
 ------------------------------------------------------------------------
 
@@ -307,30 +190,27 @@ class TravelState(TypedDict):
     weather: WeatherReport | None
     activities: list[ActivityResult]
 
+    research_tasks: list[str]             # nodes the supervisor dispatched
+    research_hints: dict[str, str]        # per research node constraint text
+    budget_retries: int
+
     itinerary: Itinerary | None
     itinerary_errors: list[str]           # itinerary validation only
     replan_count: int
 
-    progress: Annotated[list[str], add]   # human readable run log
+    progress: Annotated[list[str], add]   # human readable run log (only reducer field)
 ```
 
-`initial_state()` initializes **every** key (lists `[]`, `weather` /
-`itinerary` / `requirements` `None`, `replan_count` 0).
+`initial_state(user_request)` initialises **every** key (lists `[]`,
+`research_hints` `{}`, `budget_retries`/`replan_count` 0, optional
+objects `None`).
 
-There is **no `messages` key in TravelState anymore**. Agent
-conversations live in each research subgraph's private
-`ResearchAgentState` (see §9).
+There is no `messages` in `TravelState`: agent conversations live in
+each research subgraph's private `ResearchAgentState`.
 
-Important principles:
-
--   Nodes return only the fields they change. **Never `{**state}`**;
-    with any reducer field (`progress`) that duplicates the list, and in
-    parallel branches it causes conflicting writes. (Fixed on
-    2026-09-29 in `parse_request`, `validate_requirements`, `ask_user`,
-    `continue_plan`.)
--   Reducers are used only where multiple branches legitimately update a
-    field (`progress`).
--   `validation_errors` and `itinerary_errors` are separate on purpose.
+Principles: nodes return only changed fields; reducers only where
+branches legitimately write the same field (`progress`);
+`validation_errors` and `itinerary_errors` are separate on purpose.
 
 ------------------------------------------------------------------------
 
@@ -338,531 +218,300 @@ Important principles:
 
 `TravelRequirements` (`app/schemas/requirements.py`): `origin`,
 `destination`, `travelers`, `start_date`, `end_date`, `duration_days`
-are all **`| None = None` with `Field(description=...)`**, so the model
-can say "not given" as null. `budget_amount`, `budget_currency`,
-`interests`, `preferences` unchanged.
+are `| None = None` with `Field(description=...)`; `flights_booked`,
+`accommodation_booked` (`bool = False`, set only if the user says it is
+already booked); `budget_amount: float | None`, `budget_currency: str =
+"USD"`, `interests`, `preferences`.
 
-Extraction uses `get_llm().with_structured_output(TravelRequirements)`
-with `REQUIREMENTS_SYSTEM_PROMPT` (`app/prompts/planning.py`): only
-record stated facts, null for anything missing, no placeholders, don't
-infer origin from currency, derive `duration_days` from dates.
+Extraction: `get_llm().with_structured_output(TravelRequirements)` +
+`REQUIREMENTS_SYSTEM_PROMPT` (`app/prompts/planning.py`): only stated
+facts, null for missing, no placeholders, don't infer origin from
+currency, derive `duration_days` from dates.
 
-### Bug fixed 2026-09-29 (verified against Gemini)
+Lesson (2026-09-29): a *required* schema field forces the LLM to invent a
+value ("Unknown"); make fields optional and let deterministic validation
+decide what is mandatory.
 
-"Plan a trip to Japan for 2 people. My budget is ₹2 lakh..." used to
-pass validation: `origin` was a required `str`, so Gemini wrote
-`"Unknown"` (non-empty → passed `not origin`), and nothing required a
-trip length, so the itinerary agent invented 5 days and itinerary
-validation (which skips the duration check when it is `None`) said VALID.
-Lesson: a required schema field forces the LLM to invent a value; make
-it optional and let deterministic validation decide what is mandatory.
-
-Business validation is deterministic Python (`nodes/validation.py`):
-
--   requirements exist
--   origin / destination present (placeholders like "Unknown", "N/A"
-    count as missing)
--   travelers present and > 0
--   trip length known: `duration_days`, or both ISO dates (then
-    `_normalize` fills `duration_days` and the node writes the
-    normalized `requirements` back)
--   end date not before start date; duration >= 1
--   budget, when provided, > 0
-
-Flow:
+`validate_requirements` (`nodes/validation.py`, deterministic):
+origin/destination present (placeholders "Unknown", "N/A"… count as
+missing), travelers > 0, trip length known (`duration_days` or both ISO
+dates; `_normalize` fills `duration_days`), end ≥ start, duration ≥ 1,
+budget > 0 when given. **`_normalize` also canonicalises the currency**
+(`₹`→`INR`, `$`→`USD`, `€`, `£`, `¥`, else upper-cased) — added
+2026-09-30 because Gemini returned `'₹'` and the budget check refused to
+compare it with the tools' `'INR'`.
 
 ``` text
-parse_request
-      ↓
-validate_requirements
-      ↓
- ┌────┴─────┐
-VALID      INVALID
- ↓           ↓
-continue   ask_user
-             ↓
-        parse_request
+parse_request → validate_requirements ─┬─ valid → continue_plan
+                                       └─ invalid → ask_user → parse_request
 ```
 
 ------------------------------------------------------------------------
 
-## 8. Parallel Research
+## 8. Supervisor + Parallel Research (`Send`)
 
 ``` text
-continue_plan
-      │
- ┌────┼──────────────┬──────────────┬──────────────┐
- ↓                   ↓              ↓              ↓
-flight_research  hotel_research  weather_research  activity_research
- └───────────────────┴──────────────┴──────────────┘
-                     ↓
-             combine_research
+continue_plan → supervisor ──Send──→ flight/hotel/weather/activity_research (only chosen)
+                                        └→ combine_research → check_budget → …
 ```
 
-`RESEARCH_NODES` in `builder.py` is a `{node_name: node}` dict. The
-fan-out is one edge per branch; the fan-in is a single
-`builder.add_edge(list(RESEARCH_NODES), Node.COMBINE_RESEARCH)`, which
-makes `combine_research` wait for all branches even if they take a
-different number of steps.
+`supervisor` (deterministic, no LLM): skips flights when
+`flights_booked`, hotels when `accommodation_booked`; weather and
+activities always run. Writes `research_tasks` and a progress line.
+`route_research_agents` returns `[Send(node, state) for node in tasks]`
+(or `combine_research` if none).
 
-Each branch writes only its own key and a `progress` entry.
+**Fan-in = one edge per branch** (`for name in RESEARCH_NODES:
+builder.add_edge(name, COMBINE_RESEARCH)`), *not* `add_edge([...], d)`: a
+list edge waits for every listed node and silently never fires when the
+supervisor skipped one. If a branch becomes multi-step at parent level,
+use `defer=True` on the join node.
+
+Verified with Gemini 2026-09-30: "my flight is already booked" →
+`flights_booked=True` extracted, flight agent skipped, itinerary valid.
 
 ------------------------------------------------------------------------
 
-## 9. Research Agents (Flight / Hotel / Weather / Activity) --- DONE
+## 9. Research Agents (shared factory) — DONE
 
-All four agents share **one subgraph factory**
+All four agents use one factory
 (`app/graph/subgraphs/research_agent/`). An agent is only a spec:
 
 ``` python
 HOTEL_AGENT = ResearchAgentSpec(
     name="hotel",
-    result_key="hotels",                      # TravelState key
+    result_key="hotels",                 # TravelState key
     system_prompt=HOTEL_AGENT_SYSTEM_PROMPT,
-    build_request_prompt=build_hotel_request_prompt,
+    build_request_prompt=build_hotel_request_prompt,   # (requirements) -> str
     tools=HOTEL_TOOLS,
-    result_type=list[HotelResult],            # validated via pydantic TypeAdapter
-)                                             # empty_result defaults to list
+    result_type=list[HotelResult],       # validated with pydantic TypeAdapter
+)                                        # empty_result defaults to list
 hotel_graph = build_research_agent(HOTEL_AGENT)
 hotel_research = make_research_node(HOTEL_AGENT, hotel_graph)
 ```
 
-Weather uses `result_type=WeatherReport | None, empty_result=lambda: None`.
+Weather: `result_type=WeatherReport | None, empty_result=lambda: None`.
 
-### Subgraph (private state)
-
-``` python
-class ResearchAgentState(TypedDict):
-    messages: Annotated[list[AnyMessage], add_messages]
-    results: Any
-    tool_rounds: int
-```
+Subgraph private state:
+`ResearchAgentState{messages (add_messages), results, tool_rounds}`.
 
 ``` text
-START → agent ─┬─ tool call ──→ tools (ToolNode) → extract ─┬─ results → END
-               │                                             └─ none → agent (retry)
-               └─ no tool call → END
-MAX_TOOL_ROUNDS = 2
+START → agent ─┬─ tool call → tools (ToolNode) → extract ─┬─ results → END
+               │                                           └─ none → agent (retry)
+               └─ no tool call → END          MAX_TOOL_ROUNDS = 2
 ```
 
-### Parent adapter: `make_research_node`
+`make_research_node` (parent adapter) invokes the subgraph from a node:
+input = `[SystemMessage, HumanMessage]` built from `requirements`, **plus
+`Constraint: <hint>` appended when
+`state["research_hints"]["<name>_research"]` exists**; output = only
+`{result_key: results, "progress": [...]}`. Why private state: a
+subgraph sharing `TravelState` wrote all keys back (parallel
+`InvalidUpdateError`) and agents saw each other's tool calls.
 
-The subgraph is **invoked from a node** (`graph.invoke(..., config)`),
-not mounted directly on TravelState:
+Extract node: reads only ToolMessages after the last AIMessage, skips
+errors/invalid output with warnings, concatenates list results.
+Each agent = 1 LLM call; a full run (parse + 4 agents + itinerary) = 6.
 
--   Input mapping: builds `[SystemMessage, HumanMessage]` from
-    `requirements` and seeds the subgraph with them **once**. The old
-    `if not state["messages"]: messages = _opening_messages(state)`
-    check in the agent node is gone; the agent just does
-    `llm.invoke(state["messages"])`.
--   Output mapping: returns only `{spec.result_key: results, "progress": [...]}`.
+Prompts force exactly one tool call, `null` for missing dates, no
+follow-ups/invented data. Hotel prompt also says: if the request has a
+max price per night constraint, pass it as `max_price_per_night`.
 
-### Why (the bug this fixed)
-
-Before, the flight subgraph used `TravelState`, so:
-
-1.  its whole final state (including `requirements`,
-    `validation_errors`…) was written back to the parent, and a second
-    `TravelState` subgraph running in parallel would write the same
-    keys in the same step → `InvalidUpdateError`;
-2.  every agent would read and append to the one shared `messages`
-    list and see the others' tool calls.
-
-Now each agent's conversation is isolated and discarded after the run.
-
-### Extract node
-
--   Reads only the ToolMessages after the most recent AIMessage.
--   Skips tool errors (`status == "error"`) and output that fails
-    validation (logged as warnings) instead of crashing.
--   Concatenates list results when the agent made several calls.
-
-### Optimization
-
-The agent no longer loops back to summarise after the tool result
-(nothing used that summary). It ends as soon as results are extracted,
-so each agent costs **1 LLM call** and a full run costs **6 calls**
-(parse + 4 agents + itinerary) instead of 10. Verified offline with a
-fake LLM on 2026-09-29, including the replan path.
-
-### Prompts
-
-Each agent's system prompt forces exactly one tool call, passes `null`
-for missing dates, and forbids follow-up questions or invented
-dates/interests (the same rules that were verified with Gemini for flights).
+Mock tools (INR): flights → one option, price 42000; hotels → "Demo
+Central Hotel" 6000/night (4.3★) and "Demo Budget Inn" 3500/night
+(3.9★); `search_hotels(..., max_price_per_night=None)` filters by price.
 
 ------------------------------------------------------------------------
 
-## 10. Itinerary Agent --- DONE
+## 10. Itinerary Agent, Validation, Replanning — DONE
 
-Schemas:
+`Itinerary{destination, duration_days, days: list[ItineraryDay{day,
+title, activities}]}`. `itinerary_agent` uses
+`get_llm().with_structured_output(Itinerary)`; input = requirements +
+flights/hotels/weather/activities as JSON (`_to_json`) + previous
+`itinerary_errors` when replanning. Prompt tells it not to suggest
+booking what `flights_booked`/`accommodation_booked` mark as arranged.
 
-``` python
-class ItineraryDay(BaseModel):
-    day: int
-    title: str
-    activities: list[str]
+`validate_itinerary` (deterministic): itinerary and requirements exist;
+destination contained in itinerary destination (case-insensitive);
+duration matches; number of days matches; day numbers sequential; every
+day has activities. Writes `itinerary_errors`.
 
-
-class Itinerary(BaseModel):
-    destination: str
-    duration_days: int
-    days: list[ItineraryDay]
-```
-
-`itinerary_agent` uses:
-
-``` python
-get_llm().with_structured_output(Itinerary)
-```
-
-It receives:
-
--   `TravelRequirements`
--   flights, hotels, weather, activities (rendered as JSON by
-    `_to_json` in `app/prompts/itinerary.py`)
--   `itinerary_errors` when replanning
-
-If `duration_days` is `None` the prompt asks for "a sensible length"
-instead of rendering "a None-day itinerary".
-
-Current flow:
-
-``` text
-combine_research
-      ↓
-itinerary_agent
-      ↓
-state["itinerary"] = Itinerary
-```
-
-End-to-end generation has succeeded.
-
-------------------------------------------------------------------------
-
-## 11. Itinerary Validation --- DONE
-
-File:
-
-``` text
-app/graph/nodes/itinerary_validation.py
-```
-
-Validation is deterministic Python, not LLM-driven.
-
-Current rules:
-
-1.  itinerary exists
-2.  requirements exist
-3.  requested destination is contained in the itinerary destination
-    (case-insensitive, so "Tokyo, Japan" passes for "Japan")
-4.  duration matches requested duration
-5.  number of itinerary days matches requested duration
-6.  day numbers are sequential
-7.  every day contains activities
-
-Successful example:
-
-``` text
-Validating itinerary...
-Itinerary validation completed: VALID
-```
-
-with:
-
-``` python
-itinerary_errors == []
-```
-
-The validator writes `itinerary_errors` (not `validation_errors`).
-
-The validator has been run successfully against the generated 7-day
-Japan itinerary.
-
-------------------------------------------------------------------------
-
-## 12. Replanning Cycle --- IMPLEMENTED AND BUG FIXED
-
-The graph now supports:
-
-``` text
-itinerary_agent
-      ↓
-validate_itinerary
-      ↓
- ┌────┴──────────┐
-VALID           INVALID
- ↓                 ↓
-END              replan
-                   ↓
-            itinerary_agent
-```
-
-`replan_count` is stored in state.
-
-Router:
+Replanning:
 
 ``` python
 MAX_REPLAN_ATTEMPTS = 2
-
-
-def route_after_itinerary_validation(state: TravelState) -> str:
-    if not state["itinerary_errors"]:
-        return ItineraryRoute.VALID
-
-    if state["replan_count"] >= MAX_REPLAN_ATTEMPTS:
-        return ItineraryRoute.FAILED
-
+def route_after_itinerary_validation(state):
+    if not state["itinerary_errors"]: return ItineraryRoute.VALID
+    if state["replan_count"] >= MAX_REPLAN_ATTEMPTS: return ItineraryRoute.FAILED
     return ItineraryRoute.REPLAN
 ```
 
-Router unit checks were verified directly:
-
-``` text
-validation_errors=[],
-replan_count=0
-→ valid
-
-validation_errors=["Wrong duration"],
-replan_count=0
-→ replan
-
-validation_errors=["Wrong duration"],
-replan_count=2
-→ failed
-```
-
-The temporary routing issue encountered during development was fixed. Do
-not assume the previous erroneous behavior is still present.
-
-`replan_itinerary` increments the counter and sends execution back to
-`itinerary_agent`.
-
-The itinerary prompt receives `itinerary_errors`, allowing a future
-replan to understand what failed.
-
-### Important design point
-
-Do NOT clear `itinerary_errors` inside `replan_itinerary` before the
-itinerary agent sees them. (The code was clearing them until
-2026-09-29; fixed, and verified offline that the second itinerary
-prompt contains the previous errors.)
-
-Correct flow:
-
-``` text
-validate
-  ↓
-itinerary_errors
-  ↓
-replan
-  ↓
-itinerary_agent reads previous errors
-  ↓
-new itinerary
-  ↓
-validate again
-```
-
-The validator then overwrites `itinerary_errors` with the result of the
-new validation.
+`replan_itinerary` only increments `replan_count`. **Never clear
+`itinerary_errors` there** — the agent must read them first; the
+validator overwrites them on the next pass.
 
 ------------------------------------------------------------------------
 
-## 13. Important Gemini API Note
+## 11. Budget Check + Targeted Re-research (`Command`) — BUILT 2026-09-30
 
-The current Gemini integration sometimes logs:
+File: `app/graph/nodes/budget.py`. Wired as
+`combine_research → check_budget`; **no outgoing edges** from
+`check_budget` (it returns a `Command`). Signature:
 
-``` text
-AFC is enabled with max remote calls: 10.
-Direct use of automatic function calling (AFC) in Models.generate_content is not recommended...
+``` python
+def check_budget(state) -> Command[Literal["itinerary_agent", "hotel_research"]]:
 ```
 
-This is a provider warning, not currently a graph failure.
+Logic (all deterministic):
 
-Gemini `gemini-2.5-flash` also returned temporary:
+1.  No `budget_amount` or no hotels → proceed to `itinerary_agent`.
+2.  Currencies of flights/hotels must equal `budget_currency`, else skip
+    (logged with the currencies compared).
+3.  `estimate = cheapest flight × travelers + most expensive hotel ×
+    duration_days` (worst case: the itinerary may pick any hotel).
+4.  `estimate <= budget` → proceed ("Budget check passed…").
+5.  Over budget and `budget_retries >= MAX_BUDGET_RETRIES (1)` → proceed
+    anyway (logged).
+6.  `cap = (budget − flight_cost) / nights`; `cap <= 0` → proceed
+    ("flights alone exceed the budget").
+7.  Otherwise return `Command(update={research_hints, budget_retries+1,
+    progress}, goto=[Send(HOTEL_RESEARCH, payload)])` where `payload =
+    {**state, "research_hints": hints}` — **`Send` carries its own
+    input, so the hint must be in the payload as well as in `update`.**
+
+Loop: `combine_research → check_budget → hotel_research →
+combine_research → check_budget → itinerary_agent` (the re-run hotel
+result overwrites `hotels`; the second pass goes through `check_budget`
+again because `hotel_research → combine_research` is a fixed edge).
+
+Every outcome is logged through `logger.info` and appended to
+`progress`.
+
+Bugs found by the user's first real run (2026-09-30):
+
+-   No budget logs: only the over-budget path logged. Fixed: every path
+    logs.
+-   "Budget check skipped: currency mismatch": Gemini extracted `'₹'`,
+    tools return `'INR'`. Fixed by currency normalisation in §7.
+
+Offline unit checks passed (budget 200000 → pass; 120000 → re-research
+cap 5143; 120000 with 1 retry used → proceed; 50000 → flights-only
+message). Not yet verified end-to-end against Gemini: a run that actually
+goes over budget. Test request idea: flights booked, 8 days, budget
+₹40,000 → expect "Over budget (estimated 48,000 of 40,000);
+re-researching hotels with maximum price per night 5,000 INR", a second
+"Starting hotel research", then "Budget check passed: estimated 28,000 of
+40,000" (only Demo Budget Inn returned). If the second hotel run still
+returns both hotels, the agent did not pass `max_price_per_night` →
+prompt problem; inspect the tool-call args.
+
+Graph drawing does not show the `Command` edges from `check_budget`.
+
+------------------------------------------------------------------------
+
+## 12. Current Graph
 
 ``` text
-503 UNAVAILABLE
+START → parse_request → validate_requirements ─┬─ invalid → ask_user → parse_request
+                                               └─ valid → continue_plan → supervisor
+supervisor ──Send──→ {flight|hotel|weather|activity}_research   (only chosen)
+each research node (agent→tools→extract subgraph, private messages)
+        → combine_research → check_budget ─┬─ over budget → Send(hotel_research) → combine_research → check_budget
+                                           └─ ok / skip / retry limit → itinerary_agent
+itinerary_agent → validate_itinerary ─┬─ valid → END
+                                      ├─ invalid + attempts left → replan_itinerary → itinerary_agent
+                                      └─ invalid + max attempts → END
 ```
 
-responses due to high demand; the SDK retried and requests eventually
-succeeded.
+------------------------------------------------------------------------
 
-During replanning testing, the project also hit:
+## 13. Provider Notes (Gemini on Vertex)
 
-``` text
-429 RESOURCE_EXHAUSTED
-```
-
-with the free-tier request limit reported as 20 requests for the
-model/project.
-
-Therefore, avoid repeatedly running full `main.py` while debugging pure
-Python graph logic. Test routers/nodes directly where possible.
+-   Logs `AFC is enabled…` warning: harmless.
+-   `gemini-2.5-flash` sometimes returns 503 (SDK retries) and 429
+    `RESOURCE_EXHAUSTED` (free-tier ≈ 20 requests). Four agents call
+    Gemini concurrently. Do not confuse these with graph bugs; test
+    routers/nodes directly and use a fake LLM offline.
 
 ------------------------------------------------------------------------
 
 ## 14. Known Issues / Deliberate Debt
 
-1.  **CLI `input()`**
-    -   `ask_user` currently blocks on stdin.
-    -   Replace with `interrupt()` during the human-in-the-loop phase.
-2.  **Mock travel tools**
-    -   Flights, hotels, weather, activities return demo/fixed data.
-    -   Replace with real APIs later; the `ResearchAgentSpec` /
-        schema contracts should not need to change.
-3.  **No test suite yet**
-    -   Add `tests/` next to deterministic validation/routing. A fake
-        LLM (object with `bind_tools()` / `with_structured_output()`)
-        patched into `get_llm` in `parsing`, `itinerary` and
-        `research_agent.nodes` runs the whole graph offline; this was
-        used on 2026-09-29.
-4.  **Gemini quota / transient errors**
-    -   Do not confuse provider 503/429 responses with LangGraph bugs.
-    -   Four agents now call Gemini concurrently; watch the per-minute
-        free-tier limit.
-    -   Production hardening later should include backoff and provider
-        fallback.
-5.  **Research agents are strictly one-shot**
-    -   They do not use the budget to filter results yet; the itinerary
-        agent receives everything. Budget checks belong in validation
-        or a supervisor later.
-
-Resolved on 2026-09-29: the shared `messages` list (now private per
-agent), `{**state}` returns, replan clearing errors, and the
-provider packaging/docs debt.
+1.  `ask_user` uses blocking `input()` → replace with `interrupt()` in the
+    human-in-the-loop phase.
+2.  Mock tools return fixed data; later real APIs (specs/schemas should
+    not need to change).
+3.  No `tests/` yet. A fake LLM (object with `bind_tools()` /
+    `with_structured_output()`) patched into `get_llm` in `parsing`,
+    `itinerary` and `research_agent.nodes` runs the whole graph offline
+    (used 2026-09-29/30).
+4.  Gemini quota/transient errors: need backoff/provider fallback later.
+5.  Budget logic only re-researches hotels; activities' cost is not in
+    the estimate; flight price is treated as per person.
+6.  `cli.py` `DEFAULT_REQUEST` concatenates `"…Dubai" "for 2 people"` →
+    "Dubaifor" and lacks origin/length, so it always goes through
+    `ask_user` first (user's latest run even showed "Indiafor").
+7.  `budget_currency` default is `"USD"` when the user states no
+    currency; with INR tools that causes a "currency mismatch" skip.
+8.  The Mermaid drawing omits `Command`/`Send` edges.
 
 ------------------------------------------------------------------------
 
-## 15. Current Graph
+## 15. Teaching Rules (summary)
 
-``` text
-START
-  ↓
-parse_request
-  ↓
-validate_requirements
-  ├── invalid → ask_user → parse_request
-  └── valid
-       ↓
-  continue_plan
-       ↓
- ┌─────┼───────────────┬────────────────┬──────────────────┐
- ↓                     ↓                ↓                  ↓
-flight_research   hotel_research   weather_research   activity_research
- (agent→tools→extract subgraph, private messages, each)
- └─────────────────────┴────────────────┴──────────────────┘
-                  ↓
-          combine_research
-                  ↓
-           itinerary_agent  ←──────────┐
-                  ↓                    │
-        validate_itinerary             │
-             ↓       ↓                 │
-          valid     invalid → replan_itinerary
-             ↓
-            END
-```
-
-Retry guard:
-
-``` text
-invalid + attempts available → replan
-invalid + max attempts       → failed → END
-```
+Senior-mentor tone; concise theory; implement inside this project; one
+concept at a time; production patterns; user runs/tests after each step;
+debug real errors; don't repeat learned concepts; follow the package
+layout; prompts out of nodes; `print`/`input` only in
+`app/core/console.py`; node names in `constants.py`; update this file
+after every meaningful step.
 
 ------------------------------------------------------------------------
 
 ## 16. Current Position
 
 ``` text
-State                          ✅
-Nodes                          ✅
-StateGraph                     ✅
-Structured extraction          ✅
-Validation                     ✅
-Conditional routing            ✅
-Cycles                         ✅
-Parallel research              ✅
-Fan-out / fan-in               ✅
-Reducers                       ✅
-Tools                          ✅
-Tool calling                   ✅
-ToolNode                       ✅
-Agent loop                     ✅
-Tool-loop debugging            ✅
-Structured FlightResult        ✅
-Flight subgraph                ✅
-Parallel subgraph integration  ✅
-Production code structure      ✅
-Itinerary Agent                ✅
-Flight tool prompt verification✅
-Itinerary validation           ✅
-Replanning cycle               ✅
-Retry guard                    ✅
-Hotel/Weather/Activity agents  ✅
-Shared research agent factory  ✅
-Split messages per agent       ✅
-
-Supervisor / multi-agent       ⏭ NEXT
-Human-in-the-loop              ⏭
-Checkpointing                  ⏭
-Long-term user memory          ⏭
-Streaming                      ⏭
-Tests                          ⏭
-FastAPI                        ⏭
-PostgreSQL / Redis             ⏭
-Authentication                 ⏭
-Real travel APIs               ⏭
-Observability / LangSmith      ⏭
-Production hardening           ⏭
+Everything through Supervisor + Send + Budget check/Command   ✅ (budget loop awaiting real Gemini run)
+Human-in-the-loop                                            ⏭ NEXT
+Checkpointing / persistence                                  ⏭
+Long-term user memory                                        ⏭
+Streaming                                                    ⏭
+Tests                                                        ⏭
+FastAPI → PostgreSQL/Redis → auth → real APIs                ⏭
+Observability / LangSmith → production hardening             ⏭
 ```
 
 ------------------------------------------------------------------------
 
-## 17. NEXT SESSION --- Start Here
+## 17. NEXT SESSION — Start Here
 
-The next implementation should be:
+**Step 0 (quick, user action):** run `python3 main.py` with flights
+booked, 8 days and a budget of ₹40,000 and confirm the over-budget loop
+in §11 fires. Open question the user was asked (answer it if they have
+not): *after the hotel re-run, why does `hotel_research →
+combine_research` lead back into `check_budget` instead of the
+itinerary, and what changes if we add an edge from `hotel_research`
+straight to `itinerary_agent`?* (Answer: the fixed edge re-enters
+`combine_research → check_budget`, so the new hotel result is re-priced
+and the retry guard ends the loop; a direct edge would skip the check
+and would also make the initial pass skip the budget check.)
 
-# Supervisor / Multi-Agent Architecture
+**Step 1: Human-in-the-Loop with `interrupt()`.**
 
-Today the four research agents always run, in a fixed fan-out. Next,
-learn the supervisor pattern:
+-   Replace `ask_user`'s `input()` with `interrupt({...})` and resume
+    with `Command(resume=...)`.
+-   This **requires a checkpointer** (start with `InMemorySaver`) and a
+    `thread_id` in the run config — so introduce checkpointing minimally
+    here, then deepen it next.
+-   Add an itinerary approval gate: after a valid itinerary, interrupt
+    for approve / request changes; changes route back to
+    `itinerary_agent` (or re-research) with `user_feedback`.
+-   Update `app/cli.py` to loop: invoke → detect `__interrupt__` →
+    prompt via `app/core/console.py` → resume.
+-   Keep `input()` out of graph code (console helper only).
+-   Test offline with the fake LLM first.
 
--   A supervisor node (LLM or deterministic) decides which research
-    agents are needed (e.g. skip flights if the user already booked,
-    re-run hotels only when the budget check fails).
--   Dispatch with `Send` / `Command` instead of static edges.
--   Reuse the existing `*_research` nodes and `ResearchAgentSpec`; do
-    not rebuild the agents.
--   Consider a budget-check step that can send work back to a specific
-    agent (targeted replanning instead of regenerating everything).
-
-Before running `main.py` against Gemini, run the whole graph offline
-with a fake LLM to avoid burning the 20 requests/day free-tier quota.
-
-Do not jump to FastAPI, databases, Redis, authentication, or real APIs
-yet.
-
-------------------------------------------------------------------------
-
-## 18. Teaching Rules
-
--   Act as a senior AI Engineer mentoring a junior developer.
--   Keep theory concise; spend most time implementing.
--   Explain architectural decisions and why they matter.
--   Prefer production patterns over toy shortcuts.
--   Introduce one LangGraph concept at a time.
--   Let the user run/test after each meaningful implementation.
--   Debug actual errors instead of jumping to unrelated architecture.
--   Do not repeat concepts already successfully learned.
--   Use the Travel Planner itself to reinforce concepts.
--   Avoid premature FastAPI/database/Redis.
--   Do not dump the entire project at once.
--   Preserve working code unless there is a concrete reason to refactor.
--   Follow the package layout.
--   Keep prompts out of nodes.
--   Keep `print`/`input` out of graph code except `app/core/console.py`.
--   Add node names to `constants.py`.
--   Update this memory after every meaningful step.
+Then: persistent checkpointing (SQLite/Postgres saver), long-term
+memory, streaming, tests (`tests/` with the fake LLM), and only then
+FastAPI/databases/real APIs.

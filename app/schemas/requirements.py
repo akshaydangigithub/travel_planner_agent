@@ -33,6 +33,15 @@ class TravelRequirements(BaseModel):
         description="Trip length in days. Null if neither stated nor derivable from the dates.",
     )
 
+    flights_booked: bool = Field(
+        default=False,
+        description="True only if the user says their flights are already booked.",
+    )
+    accommodation_booked: bool = Field(
+        default=False,
+        description="True only if the user says their hotel or stay is already booked.",
+    )
+
     budget_amount: float | None = None
     budget_currency: str = "USD"
 

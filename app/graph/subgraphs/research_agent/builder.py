@@ -77,13 +77,19 @@ def make_research_node(spec: ResearchAgentSpec, graph: CompiledStateGraph):
         if requirements is None:
             raise ValueError("Travel requirements are missing")
 
+        request = spec.build_request_prompt(requirements)
+        hint = state["research_hints"].get(f"{spec.name}_research")
+
+        if hint:
+            request += f"\nConstraint: {hint}"
+
         logger.info("Starting %s research", spec.name)
 
         result = graph.invoke(
             {
                 "messages": [
                     SystemMessage(content=spec.system_prompt),
-                    HumanMessage(content=spec.build_request_prompt(requirements)),
+                    HumanMessage(content=request),
                 ],
                 "results": spec.empty_result(),
                 "tool_rounds": 0,

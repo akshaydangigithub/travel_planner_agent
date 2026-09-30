@@ -26,6 +26,8 @@ Rules:
 - Consider the user's interests and preferences.
 - Keep each day realistic and logically organized.
 - Return exactly the requested number of days.
+- If flights_booked or accommodation_booked is true, the traveller has
+  already arranged that part; do not suggest booking it.
 """
 
 

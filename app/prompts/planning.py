@@ -6,7 +6,9 @@ REQUIREMENTS_SYSTEM_PROMPT = (
     "Use null for any field the user did not state; never guess, and never "
     "write placeholders such as 'Unknown' or 'N/A'. "
     "Do not infer the origin from the budget currency. "
-    "Set duration_days from the dates when both dates are given."
+    "Set duration_days from the dates when both dates are given. "
+    "Set flights_booked or accommodation_booked to true only when the user "
+    "says that part of the trip is already booked."
 )
 
 

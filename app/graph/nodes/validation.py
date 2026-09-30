@@ -20,8 +20,17 @@ def _parse_date(value: str | None) -> date | None:
         return None
 
 
+_CURRENCY_CODES = {"₹": "INR", "rs": "INR", "rs.": "INR", "$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY"}
+
+
 def _normalize(requirements: TravelRequirements) -> TravelRequirements:
-    """Fill ``duration_days`` from the dates when only the dates were given."""
+    """Canonicalise the currency and fill ``duration_days`` from the dates."""
+
+    code = _CURRENCY_CODES.get(
+        requirements.budget_currency.strip().casefold(),
+        requirements.budget_currency.strip().upper(),
+    )
+    requirements = requirements.model_copy(update={"budget_currency": code})
 
     if requirements.duration_days is not None:
         return requirements

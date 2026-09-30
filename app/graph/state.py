@@ -25,12 +25,16 @@ class TravelState(TypedDict):
     weather: WeatherReport | None
     activities: list[ActivityResult]
 
+    # Research nodes the supervisor dispatched for this run.
+    research_tasks: list[str]
+    # Per-agent constraint text, e.g. {"hotel_research": "max 5000 per night"}.
+    research_hints: dict[str, str]
+    budget_retries: int
+
     itinerary: Itinerary | None
     itinerary_errors: list[str]
     replan_count: int
 
-    # Human readable run log. Agent conversations live in each research
-    # subgraph's own state and never reach this graph.
     progress: Annotated[list[str], add]
 
 
@@ -46,6 +50,9 @@ def initial_state(user_request: str) -> TravelState:
         "hotels": [],
         "weather": None,
         "activities": [],
+        "research_tasks": [],
+        "research_hints": {},
+        "budget_retries": 0,
         "itinerary": None,
         "itinerary_errors": [],
         "replan_count": 0,

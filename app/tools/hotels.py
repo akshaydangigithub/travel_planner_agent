@@ -9,15 +9,17 @@ def search_hotels(
     check_in: str | None = None,
     check_out: str | None = None,
     travelers: int = 1,
+    max_price_per_night: float | None = None,
 ) -> list[dict]:
     """
     Search for hotels at the destination.
 
     Returns accommodation options for the requested
-    stay dates and number of travelers.
+    stay dates and number of travelers. When max_price_per_night is
+    given, only hotels at or below that price are returned.
     """
 
-    return [
+    hotels = [
         {
             "name": "Demo Central Hotel",
             "destination": destination,
@@ -39,6 +41,11 @@ def search_hotels(
             "rating": 3.9,
         },
     ]
+
+    if max_price_per_night is not None:
+        hotels = [h for h in hotels if h["price_per_night"] <= max_price_per_night]
+
+    return hotels
 
 
 HOTEL_TOOLS = [search_hotels]

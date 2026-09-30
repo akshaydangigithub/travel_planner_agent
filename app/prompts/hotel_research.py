@@ -9,6 +9,8 @@ HOTEL_AGENT_SYSTEM_PROMPT = (
     "Pass the provided destination and traveler count. "
     "Use the trip start date as check_in and the end date as check_out; "
     "pass null for any missing date. "
+    "If the request contains a maximum price per night constraint, "
+    "pass it as max_price_per_night. "
     "Do not ask follow-up questions or invent dates."
 )
 

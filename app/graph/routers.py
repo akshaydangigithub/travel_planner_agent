@@ -1,6 +1,8 @@
 """Conditional edges for the top level travel graph."""
 
-from app.graph.constants import ItineraryRoute, ValidationRoute
+from langgraph.types import Send
+
+from app.graph.constants import ItineraryRoute, Node, ValidationRoute
 from app.graph.state import TravelState
 
 MAX_REPLAN_ATTEMPTS = 2
@@ -25,3 +27,16 @@ def route_after_itinerary_validation(state: TravelState) -> str:
         return ItineraryRoute.FAILED
 
     return ItineraryRoute.REPLAN
+
+
+def route_research_agents(state: TravelState) -> list[Send] | str:
+    """Fan out to exactly the research nodes the supervisor chose.
+
+    Each ``Send`` starts one branch with the current state as its input.
+    With no tasks there is nothing to wait for, so go straight to the join.
+    """
+
+    if not state["research_tasks"]:
+        return Node.COMBINE_RESEARCH
+
+    return [Send(task, state) for task in state["research_tasks"]]
