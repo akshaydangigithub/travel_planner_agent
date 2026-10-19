@@ -6,6 +6,7 @@ from langgraph.types import Command, Send
 
 from app.core.logging import get_logger
 from app.graph.constants import Node
+from app.costing import nights as trip_nights
 from app.graph.state import TravelState
 
 logger = get_logger(__name__)
@@ -28,15 +29,18 @@ def check_budget(
         raise ValueError("Travel requirements are missing")
 
     budget = requirements.budget_amount
-    nights = requirements.duration_days or 1
+    nights = trip_nights(requirements)
     travelers = requirements.travelers or 1
 
     def proceed(note: str) -> Command:
         logger.info(note)
         return Command(update={"progress": [note]}, goto=Node.ITINERARY_AGENT)
 
-    if budget is None or not state["hotels"]:
-        return proceed("Budget check skipped: no budget or no hotels to price.")
+    if budget is None:
+        return proceed("Budget check skipped: no budget given.")
+
+    if not state["hotels"]:
+        return proceed("Budget check skipped: no hotel prices to compare.")
 
     currencies = {f.currency for f in state["flights"]} | {
         h.currency for h in state["hotels"]

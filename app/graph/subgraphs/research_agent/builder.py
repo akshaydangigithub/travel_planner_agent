@@ -33,8 +33,11 @@ def build_research_agent(spec: ResearchAgentSpec) -> CompiledStateGraph:
 
     builder = StateGraph(ResearchAgentState)
 
+    # handle_tool_errors: a failing API becomes an error ToolMessage that the
+    # extract node skips, instead of an exception that kills the whole run.
+
     builder.add_node(ResearchAgentNode.AGENT, make_agent_node(spec))
-    builder.add_node(ResearchAgentNode.TOOLS, ToolNode(spec.tools))
+    builder.add_node(ResearchAgentNode.TOOLS, ToolNode(spec.tools, handle_tool_errors=True))
     builder.add_node(ResearchAgentNode.EXTRACT, make_extract_node(spec))
 
     builder.add_edge(START, ResearchAgentNode.AGENT)

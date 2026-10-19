@@ -1,16 +1,23 @@
 """Assembly of the top level travel planning graph."""
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.base import BaseStore
 
 from app.graph.constants import ItineraryRoute, Node, ValidationRoute
 from app.graph.nodes import (
+    apply_revision,
     ask_user,
     check_budget,
     combine_research,
     continue_plan,
     itinerary_agent,
+    load_profile,
     parse_request,
     replan_itinerary,
+    review_itinerary,
+    save_profile,
     supervisor,
     validate_itinerary,
     validate_requirements,
@@ -36,11 +43,20 @@ RESEARCH_NODES = {
 }
 
 
-def build_travel_graph():
-    """Wire parsing, validation, parallel research and itinerary planning."""
+def build_travel_graph(
+    checkpointer: BaseCheckpointSaver | None = None,
+    store: BaseStore | None = None,
+) -> CompiledStateGraph:
+    """Wire parsing, validation, parallel research and itinerary planning.
+
+    ``ask_user`` and ``review_itinerary`` call ``interrupt()``, which needs a
+    checkpointer; ``load_profile``/``save_profile`` use the store. Both are
+    injected so the CLI and the API choose the backend (see app.persistence).
+    """
 
     builder = StateGraph(TravelState)
 
+    builder.add_node(Node.LOAD_PROFILE, load_profile)
     builder.add_node(Node.PARSE_REQUEST, parse_request)
     builder.add_node(Node.VALIDATE_REQUIREMENTS, validate_requirements)
     builder.add_node(Node.ASK_USER, ask_user)
@@ -51,8 +67,15 @@ def build_travel_graph():
     builder.add_node(Node.ITINERARY_AGENT, itinerary_agent)
     builder.add_node(Node.ITINERARY_VALIDATION, validate_itinerary)
     builder.add_node(Node.REPLAN_ITINERARY, replan_itinerary)
+    # review_itinerary returns a Command (approve / revise / reject).
+    builder.add_node(Node.REVIEW_ITINERARY, review_itinerary)
+    # apply_revision also returns a Command: re-research, re-check the
+    # budget or only rewrite the itinerary, depending on what changed.
+    builder.add_node(Node.APPLY_REVISION, apply_revision)
+    builder.add_node(Node.SAVE_PROFILE, save_profile)
 
-    builder.add_edge(START, Node.PARSE_REQUEST)
+    builder.add_edge(START, Node.LOAD_PROFILE)
+    builder.add_edge(Node.LOAD_PROFILE, Node.PARSE_REQUEST)
     builder.add_edge(Node.PARSE_REQUEST, Node.VALIDATE_REQUIREMENTS)
 
     builder.add_conditional_edges(
@@ -97,15 +120,13 @@ def build_travel_graph():
         Node.ITINERARY_VALIDATION,
         route_after_itinerary_validation,
         {
-            ItineraryRoute.VALID: END,
+            ItineraryRoute.VALID: Node.REVIEW_ITINERARY,
             ItineraryRoute.REPLAN: Node.REPLAN_ITINERARY,
             ItineraryRoute.FAILED: END,
         },
     )
 
     builder.add_edge(Node.REPLAN_ITINERARY, Node.ITINERARY_AGENT)
+    builder.add_edge(Node.SAVE_PROFILE, END)
 
-    return builder.compile()
-
-
-travel_graph = build_travel_graph()
+    return builder.compile(checkpointer=checkpointer, store=store)

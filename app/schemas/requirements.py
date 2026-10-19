@@ -42,8 +42,17 @@ class TravelRequirements(BaseModel):
         description="True only if the user says their hotel or stay is already booked.",
     )
 
-    budget_amount: float | None = None
-    budget_currency: str = "USD"
+    budget_amount: float | None = Field(
+        default=None,
+        description="Total trip budget as a number. Null if not stated.",
+    )
+    # No default currency here: a guessed "USD" made INR budgets look like a
+    # currency mismatch. validate_requirements fills it from the user's
+    # profile or the configured default.
+    budget_currency: str | None = Field(
+        default=None,
+        description="Currency of the budget as stated (code or symbol). Null if not stated.",
+    )
 
     interests: list[str] = []
     preferences: list[str] = []

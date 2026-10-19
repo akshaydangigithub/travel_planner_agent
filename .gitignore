@@ -12,3 +12,5 @@ wheels/
 # Local secrets
 .env
 ai.json
+# Local checkpoint / memory database
+.data/

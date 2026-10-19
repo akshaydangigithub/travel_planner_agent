@@ -1,7 +1,15 @@
 langgraph
+langgraph-checkpoint-sqlite
+langgraph-checkpoint-postgres
 langchain-core
 langchain-mistralai
+langchain-google-genai
 python-dotenv
 pydantic
 typing-extensions
-langchain-google-genai
+fastapi
+uvicorn[standard]
+httpx
+psycopg[binary,pool]
+redis
+streamlit

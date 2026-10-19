@@ -18,6 +18,10 @@ class Node:
     REPLAN_ITINERARY = "replan_itinerary"
     SUPERVISOR = "supervisor"
     CHECK_BUDGET = "check_budget"
+    LOAD_PROFILE = "load_profile"
+    REVIEW_ITINERARY = "review_itinerary"
+    APPLY_REVISION = "apply_revision"
+    SAVE_PROFILE = "save_profile"
 
 
 class ValidationRoute:
@@ -33,6 +37,21 @@ class ItineraryRoute:
     VALID = "valid"
     REPLAN = "replan"
     FAILED = "failed"
+
+
+class InterruptKind:
+    """What a paused run is waiting for; sent to the client with the pause."""
+
+    MISSING_REQUIREMENTS = "missing_requirements"
+    ITINERARY_REVIEW = "itinerary_review"
+
+
+class ReviewAction:
+    """Answers accepted when the user reviews an itinerary."""
+
+    APPROVE = "approve"
+    REVISE = "revise"
+    REJECT = "reject"
 
 
 class ResearchAgentNode:

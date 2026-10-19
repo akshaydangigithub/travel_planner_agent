@@ -9,16 +9,25 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "langgraph",
+    "langgraph-checkpoint-sqlite",
+    "langgraph-checkpoint-postgres",
     "langchain-core",
     "langchain-mistralai",
     "langchain-google-genai",
     "python-dotenv",
     "pydantic",
     "typing-extensions",
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "psycopg[binary,pool]",
+    "redis",
+    "streamlit",
 ]
 
 [project.scripts]
 travel-planner = "app.cli:main"
+travel-planner-api = "app.api.main:run"
 
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]

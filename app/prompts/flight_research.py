@@ -8,6 +8,7 @@ FLIGHT_AGENT_SYSTEM_PROMPT = (
     "the start date, end date, or both are missing. "
     "Pass the provided origin, destination, and traveler count. "
     "Pass each provided date as given; pass null for any missing date. "
+    "Pass the provided currency as currency. "
     "Do not ask follow-up questions or invent dates."
 )
 
@@ -20,5 +21,6 @@ def build_flight_request_prompt(requirements: TravelRequirements) -> str:
         f"Destination: {requirements.destination}\n"
         f"Start date: {requirements.start_date}\n"
         f"End date: {requirements.end_date}\n"
-        f"Travelers: {requirements.travelers}"
+        f"Travelers: {requirements.travelers}\n"
+        f"Currency: {requirements.budget_currency}"
     )

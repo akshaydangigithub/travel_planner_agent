@@ -3,6 +3,7 @@
 from functools import lru_cache
 
 from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+from langgraph.config import get_stream_writer
 from pydantic import TypeAdapter, ValidationError
 
 from app.core.llm import get_llm
@@ -24,6 +25,19 @@ def make_agent_node(spec: ResearchAgentSpec):
         logger.info("Calling %s agent", spec.name)
 
         response = get_agent_llm().invoke(state["messages"])
+
+        # Visible to callers streaming with stream_mode="custom".
+        writer = get_stream_writer()
+
+        for call in getattr(response, "tool_calls", None) or []:
+            writer(
+                {
+                    "event": "tool_call",
+                    "agent": spec.name,
+                    "tool": call["name"],
+                    "args": call["args"],
+                }
+            )
 
         return {"messages": [response]}
 

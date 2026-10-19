@@ -28,6 +28,9 @@ def itinerary_agent(state: TravelState) -> dict:
         weather=state["weather"],
         activities=state["activities"],
         validation_errors=state["itinerary_errors"],
+        change_requests=state["itinerary_feedback"],
+        previous_itinerary=state["itinerary"],
+        assumptions=state.get("assumptions", []),
     )
 
     itinerary = structured_llm.invoke(

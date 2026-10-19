@@ -1,0 +1,84 @@
+# Local infrastructure, and optionally the whole stack.
+#
+#   docker compose up -d                       # postgres + redis only
+#   docker compose --profile app up -d --build # + API (8000) and UI (8501)
+#
+# For the API/CLI on the host:
+#   PERSISTENCE_BACKEND=postgres
+#   DATABASE_URL=postgresql://travel:travel@localhost:5433/travel_planner
+#   REDIS_URL=redis://localhost:6379/0
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: travel
+      POSTGRES_PASSWORD: travel
+      POSTGRES_DB: travel_planner
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U travel -d travel_planner"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  api:
+    profiles: ["app"]
+    build: .
+    env_file: .env
+    environment:
+      PERSISTENCE_BACKEND: postgres
+      DATABASE_URL: postgresql://travel:travel@postgres:5432/travel_planner
+      REDIS_URL: redis://redis:6379/0
+      GOOGLE_CREDENTIALS_FILE: /run/secrets/google_credentials.json
+    volumes:
+      - ./ai.json:/run/secrets/google_credentials.json:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  ui:
+    profiles: ["app"]
+    build: .
+    command:
+      - streamlit
+      - run
+      - streamlit_app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+    environment:
+      TRAVEL_API_URL: http://api:8000
+      # Set to skip the sign-in screen (single-user deployments only).
+      TRAVEL_API_KEY: ${TRAVEL_API_KEY:-}
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8501/_stcore/health"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

@@ -1,6 +1,6 @@
 # Travel Planner Agent — Project Memory + Tutor Brief
 
-> Last update: 2026-09-30.
+> Last update: 2026-10-19.
 > Single source of truth for the project. Update it after every
 > meaningful implementation step.
 >
@@ -34,8 +34,9 @@ How to teach:
     paste; do not jump to unrelated architecture.
 -   End each step with one short comprehension question, and remind the
     user to update this file (provide the updated sections).
--   Avoid FastAPI / databases / Redis / auth / real APIs until their
-    turn in the roadmap (§2).
+-   Tests and Observability/LangSmith/production hardening were
+    deliberately left out by the user (2026-10-19); do not start them
+    unless asked.
 
 Code conventions (must follow): keep prompts out of nodes; no
 `print`/`input` in graph code except `app/core/console.py`; node names
@@ -79,14 +80,15 @@ LangGraph fundamentals → requirement workflow → validation + routing
 → hotel / weather / activity agents, shared agent factory            ✅
 → private subgraph state (split messages)                            ✅
 → supervisor + Send dispatch                                         ✅
-→ budget check + targeted re-research + Command                      ✅ (built, see §17)
-→ Human-in-the-Loop (interrupt)                                      NEXT
-→ Checkpointing / persistence
-→ Long-term user memory (Store)
-→ Streaming
-→ Tests
-→ FastAPI → PostgreSQL / Redis → real travel APIs
-→ Observability / LangSmith → production hardening
+→ budget check + targeted re-research + Command                      ✅ (verified on Gemini 2026-10-19)
+→ Human-in-the-Loop (interrupt)                                      ✅ 2026-10-19
+→ Checkpointing / persistence (memory / sqlite / postgres)           ✅ 2026-10-19
+→ Long-term user memory (Store)                                      ✅ 2026-10-19
+→ Streaming (updates + custom, SSE)                                  ✅ 2026-10-19
+→ FastAPI + API-key auth → PostgreSQL / Redis → real travel APIs     ✅ 2026-10-19
+→ Streamlit UI (API client) + Docker image/compose                   ✅ 2026-10-19
+→ Tests                                                              OMITTED (user decision)
+→ Observability / LangSmith → production hardening                   OMITTED (user decision)
 ```
 
 ------------------------------------------------------------------------
@@ -99,14 +101,19 @@ LangGraph fundamentals → requirement workflow → validation + routing
 -   Mistral remains in settings/deps but is not the active provider
 -   Pydantic, python-dotenv, typing-extensions
 
-`requirements.txt`: langgraph, langchain-core, langchain-mistralai,
-langchain-google-genai, python-dotenv, pydantic, typing-extensions.
+`requirements.txt`: langgraph, langgraph-checkpoint-sqlite,
+langgraph-checkpoint-postgres, langchain-core, langchain-mistralai,
+langchain-google-genai, python-dotenv, pydantic, typing-extensions,
+fastapi, uvicorn[standard], httpx, psycopg[binary,pool], redis.
+Installed with `uv pip install --python .venv/bin/python ...` (the venv has
+no pip).
 
 `grandalf` is not installed, so `draw_ascii()` fails; use
 `graph.get_graph().draw_mermaid()`.
 
-Not introduced yet: FastAPI, PostgreSQL, Redis, LangSmith, auth, real
-travel APIs, deployment.
+Live data: SerpApi (Google Flights / Hotels / Maps) + Open-Meteo weather
+(geocoded with OSM Nominatim). Amadeus Self-Service was NOT used: it was
+shut down on 2026-07-17. Not introduced: LangSmith, deployment (by choice).
 
 ------------------------------------------------------------------------
 
@@ -116,10 +123,19 @@ travel APIs, deployment.
 travel_planner/
 ├── main.py                  thin launcher → app.cli:main
 ├── pyproject.toml, requirements.txt, README.md, .env, .env.example
+├── streamlit_app.py         thin launcher → app.ui.app:main
+├── Dockerfile, .dockerignore  one image: API (default CMD) and UI (streamlit command)
+├── .streamlit/config.toml   production Streamlit settings
+├── docker-compose.yml       postgres (host port 5433) + redis; `--profile app` adds api + ui
 ├── memory.md                ← this file
 └── app/
-    ├── cli.py               run + readable report
-    ├── core/                config.py, llm.py (get_llm), logging.py, console.py (show/prompt)
+    ├── ui/                  Streamlit UI: app.py, client.py (httpx + SSE parser), components.py, config.py
+    ├── cli.py               argparse CLI: stream, answer interrupts, --thread/--user/--memory/--forget
+    ├── api/                 main.py (create_app, lifespan), routes.py, auth.py, schemas.py
+    ├── services/planner.py  TripPlanner: start/resume/retry/_stream/snapshot/memory/forget
+    ├── persistence.py       open_persistence() + user-memory helpers (get/put profile, trips)
+    ├── integrations/        http.py (cached get_json), serpapi.py, open_meteo.py
+    ├── core/                config.py, llm.py (get_llm), logging.py, console.py, cache.py
     ├── graph/
     │   ├── state.py         TravelState + initial_state()
     │   ├── constants.py     Node, ValidationRoute, ItineraryRoute,
@@ -129,15 +145,15 @@ travel_planner/
     │   ├── builder.py       build_travel_graph() → travel_graph
     │   ├── nodes/
     │   │   parsing.py  supervisor.py  validation.py  interaction.py
-    │   │   aggregation.py  budget.py  itinerary.py
+    │   │   aggregation.py  budget.py  itinerary.py  memory.py
     │   │   itinerary_validation.py  replanning.py
     │   └── subgraphs/
     │       research_agent/  state.py spec.py nodes.py routers.py builder.py   (shared factory)
     │       flights/ hotels/ weather/ activities/   each: builder.py with a ResearchAgentSpec
     ├── prompts/     planning, flight_research, hotel_research, weather_research,
     │                activity_research, itinerary
-    ├── schemas/     requirements, flights, hotels, weather, activities, itinerary
-    └── tools/       flights, hotels, weather, activities   (all MOCK data, INR)
+    ├── schemas/     requirements, flights, hotels, weather, activities, itinerary, profile
+    └── tools/       flights, hotels, weather, activities   (mock INR data, or live via integrations/)
 ```
 
 Package rules:
@@ -154,8 +170,13 @@ Package rules:
 | Setting/env var | `app/core/config.py` + `.env.example` |
 | User I/O | `app/core/console.py` |
 | Progress output | logger + `progress` state entry |
+| External API client | `app/integrations/<provider>.py` (returns schema-shaped dicts) |
+| Run/resume logic shared by CLI + API | `app/services/planner.py` |
+| HTTP route | `app/api/routes.py` |
 
-Dependencies flow inward: core → schemas → tools → prompts → graph → cli.
+Dependencies flow inward: core → schemas → integrations → tools → prompts
+→ persistence → graph → services → cli / api. (`core` must not import
+`schemas`; that is why `persistence.py` is not in `core/`.)
 
 ------------------------------------------------------------------------
 
@@ -170,8 +191,17 @@ subgraphs (compiled graph as node, private state schema, invoking from a
 node with explicit input/output mapping), spec-driven node/subgraph
 factories, supervisor pattern, dynamic fan-out with `Send`, why list
 edges break with optional branches, controlled replanning + retry guard,
-**`Command(update=..., goto=...)` including `goto=[Send(...)]`** (built
-2026-09-30; user still to confirm it works against Gemini).
+**`Command(update=..., goto=...)` including `goto=[Send(...)]`**.
+
+Built 2026-10-19 (explain these when the user asks; they were implemented
+for them, not yet taught step by step): `interrupt()` +
+`Command(resume=...)`, checkpointers (`InMemorySaver`, `SqliteSaver`,
+`PostgresSaver`) and `thread_id`, `graph.get_state()` (`.values`,
+`.next`, `.interrupts`), retry from last checkpoint with
+`graph.stream(None, config)`, the `Store` (`InMemoryStore`, `SqliteStore`,
+`PostgresStore`) with namespaces, `Runtime` injection
+(`runtime.store`), `get_config()`, `stream_mode=["updates","custom"]`
+with `subgraphs=True`, `get_stream_writer()`, serializer allowlist.
 
 ------------------------------------------------------------------------
 
@@ -179,8 +209,11 @@ edges break with optional branches, controlled replanning + retry guard,
 
 ``` python
 class TravelState(TypedDict):
+    user_id: str                          # thread owner + memory namespace
+    user_profile: dict[str, Any]          # UserProfile dump, from load_profile
+
     user_request: str
-    user_feedback: str
+    user_feedback: str                    # all corrections, joined by newlines
 
     requirements: TravelRequirements | None
     validation_errors: list[str]          # requirement validation only
@@ -198,10 +231,14 @@ class TravelState(TypedDict):
     itinerary_errors: list[str]           # itinerary validation only
     replan_count: int
 
+    itinerary_feedback: str               # latest change request from review
+    revision_count: int
+    review_decision: str                  # "" | "approved" | "rejected"
+
     progress: Annotated[list[str], add]   # human readable run log (only reducer field)
 ```
 
-`initial_state(user_request)` initialises **every** key (lists `[]`,
+`initial_state(user_request, user_id)` initialises **every** key (lists `[]`,
 `research_hints` `{}`, `budget_retries`/`replan_count` 0, optional
 objects `None`).
 
@@ -220,8 +257,9 @@ branches legitimately write the same field (`progress`);
 `destination`, `travelers`, `start_date`, `end_date`, `duration_days`
 are `| None = None` with `Field(description=...)`; `flights_booked`,
 `accommodation_booked` (`bool = False`, set only if the user says it is
-already booked); `budget_amount: float | None`, `budget_currency: str =
-"USD"`, `interests`, `preferences`.
+already booked); `budget_amount: float | None`, `budget_currency: str |
+None = None` (was `"USD"`, which caused false currency mismatches),
+`interests`, `preferences`.
 
 Extraction: `get_llm().with_structured_output(TravelRequirements)` +
 `REQUIREMENTS_SYSTEM_PROMPT` (`app/prompts/planning.py`): only stated
@@ -239,11 +277,16 @@ dates; `_normalize` fills `duration_days`), end ≥ start, duration ≥ 1,
 budget > 0 when given. **`_normalize` also canonicalises the currency**
 (`₹`→`INR`, `$`→`USD`, `€`, `£`, `¥`, else upper-cased) — added
 2026-09-30 because Gemini returned `'₹'` and the budget check refused to
-compare it with the tools' `'INR'`.
+compare it with the tools' `'INR'`. A missing currency becomes the profile
+currency, else `DEFAULT_CURRENCY` (INR).
+
+`_apply_profile` (2026-10-19) fills only *gaps* from the saved profile:
+origin → `home_origin`, empty interests → saved interests; each fill is
+reported in `progress` so the user can correct it at review.
 
 ``` text
-parse_request → validate_requirements ─┬─ valid → continue_plan
-                                       └─ invalid → ask_user → parse_request
+load_profile → parse_request → validate_requirements ─┬─ valid → continue_plan
+                                                      └─ invalid → ask_user (interrupt) → parse_request
 ```
 
 ------------------------------------------------------------------------
@@ -395,16 +438,14 @@ Bugs found by the user's first real run (2026-09-30):
 -   "Budget check skipped: currency mismatch": Gemini extracted `'₹'`,
     tools return `'INR'`. Fixed by currency normalisation in §7.
 
-Offline unit checks passed (budget 200000 → pass; 120000 → re-research
-cap 5143; 120000 with 1 retry used → proceed; 50000 → flights-only
-message). Not yet verified end-to-end against Gemini: a run that actually
-goes over budget. Test request idea: flights booked, 8 days, budget
-₹40,000 → expect "Over budget (estimated 48,000 of 40,000);
-re-researching hotels with maximum price per night 5,000 INR", a second
-"Starting hotel research", then "Budget check passed: estimated 28,000 of
-40,000" (only Demo Budget Inn returned). If the second hotel run still
-returns both hotels, the agent did not pass `max_price_per_night` →
-prompt problem; inspect the tool-call args.
+**Verified on Gemini 2026-10-19** (the CLI's default request): "Over budget
+(estimated 48,000 of 40,000); re-researching hotels with maximum price per
+night 5,000 INR" → second hotel search with `max_price_per_night: 5000` →
+"Budget check passed: estimated 28,000 of 40,000".
+
+That run exposed a prompt bug: on the *first* pass Gemini passed the
+total budget (40000) as `max_price_per_night`. Fixed in the hotel system
+prompt: only pass it when a `Constraint:` line gives one.
 
 Graph drawing does not show the `Command` edges from `check_budget`.
 
@@ -413,16 +454,167 @@ Graph drawing does not show the `Command` edges from `check_budget`.
 ## 12. Current Graph
 
 ``` text
-START → parse_request → validate_requirements ─┬─ invalid → ask_user → parse_request
-                                               └─ valid → continue_plan → supervisor
+START → load_profile → parse_request → validate_requirements ─┬─ invalid → ask_user (interrupt) → parse_request
+                                                              └─ valid → continue_plan → supervisor
 supervisor ──Send──→ {flight|hotel|weather|activity}_research   (only chosen)
 each research node (agent→tools→extract subgraph, private messages)
         → combine_research → check_budget ─┬─ over budget → Send(hotel_research) → combine_research → check_budget
                                            └─ ok / skip / retry limit → itinerary_agent
-itinerary_agent → validate_itinerary ─┬─ valid → END
+itinerary_agent → validate_itinerary ─┬─ valid → review_itinerary (interrupt)
                                       ├─ invalid + attempts left → replan_itinerary → itinerary_agent
                                       └─ invalid + max attempts → END
+review_itinerary (Command) ─┬─ approve → save_profile → END
+                            ├─ revise (≤3) → apply_revision (Command, see §12f)
+                            ├─ revise with no text / over limit → review_itinerary (asks again)
+                            └─ reject → END
 ```
+
+`build_travel_graph(checkpointer, store)`; there is no module-level
+`travel_graph` any more (an interrupting graph needs a checkpointer).
+
+------------------------------------------------------------------------
+
+## 12a. Human-in-the-Loop — DONE 2026-10-19 (`app/graph/nodes/interaction.py`)
+
+-   `ask_user`: `answer = interrupt({"kind": "missing_requirements",
+    "question", "errors"})`; appends the answer to `user_feedback`.
+-   `review_itinerary` → `Command[...]`: `interrupt({"kind":
+    "itinerary_review", "question", "itinerary", "revisions_left"})`.
+    Resume value: `{"action": "approve"|"revise"|"reject", "feedback"}` or
+    free text ("yes"/"approve" → approve, "no"/"reject" → reject, other
+    text → revise with that text). Revise resets `replan_count` to 0.
+    `MAX_REVISIONS = 3`.
+-   Kinds/actions live in `constants.py` (`InterruptKind`, `ReviewAction`).
+-   Lesson: the node **re-runs from the top on resume**, so nothing with
+    side effects may come before `interrupt()`.
+
+## 12b. Persistence + long-term memory — DONE 2026-10-19
+
+`app/persistence.py`: `open_persistence(settings)` yields
+`(checkpointer, store)` for `PERSISTENCE_BACKEND` = `memory` | `sqlite`
+(default, `.data/travel_planner.db`) | `postgres` (`ConnectionPool`,
+`autocommit`, `dict_row`, `prepare_threshold=0`; `.setup()` on start). The
+checkpointer uses `JsonPlusSerializer(allowed_msgpack_modules=[our
+schemas])` so only our models are rebuilt from the DB.
+
+Memory (Store): namespace `("users", user_id)` key `"profile"` →
+`UserProfile{home_origin, currency, interests, preferences,
+trips_planned}`; namespace `("users", user_id, "trips")` key `thread_id`
+→ `TripSummary`. `load_profile` (first node) reads it via
+`runtime: Runtime` → `runtime.store`; `save_profile` (after approve)
+merges and records the trip (`get_config()` for `thread_id`).
+`delete_user_memory` = forget.
+
+## 12c. Streaming + service layer — DONE 2026-10-19
+
+`TripPlanner` (`app/services/planner.py`) is used by both CLI and API:
+`start` / `resume` (`Command(resume=...)`) / `retry` (`stream(None)` from
+the last checkpoint after e.g. a 429) / `snapshot` (status from
+`get_state`: `needs_input`, `awaiting_review`, `approved`, `rejected`,
+`failed`, `incomplete`) / `memory` / `forget`. `_stream` uses
+`stream_mode=["updates","custom"], subgraphs=True`: top-level updates →
+`progress` and `interrupt` events; custom events = research agents'
+`tool_call`s written with `get_stream_writer()` (they only reach the
+parent stream with `subgraphs=True` — learned the hard way). Ownership: a
+thread whose `user_id` differs raises `TripNotFound` (same as unknown).
+
+## 12d. FastAPI, auth, Postgres/Redis, real APIs — DONE 2026-10-19
+
+-   `uvicorn app.api.main:app`; lifespan opens persistence once and stores
+    a `TripPlanner` on `app.state`. Routes are sync `def` (thread pool).
+    Endpoints: `/health`, `POST /trips` (+`/stream` SSE), `GET
+    /trips/{id}`, `POST /trips/{id}/resume` (+`/stream`), `POST
+    /trips/{id}/retry`, `GET|DELETE /me/memory`. 409 when resuming a trip
+    that is not paused.
+-   Auth: `API_KEYS=key:user_id,...`, header `X-API-Key` or Bearer,
+    `hmac.compare_digest`; the API refuses to start without keys.
+-   Redis: `app/core/cache.py` caches external API JSON (`REDIS_URL`,
+    else in-process TTL cache); Redis errors = cache miss.
+-   Real data (`TRAVEL_DATA_PROVIDER=live`, needs `SERPAPI_API_KEY`):
+    flights (`google_flights_autocomplete` → id, `google_flights`; price
+    divided by travellers, **assumed total-for-all-passengers — verify on
+    first live run**), hotels (`google_hotels`, `rate_per_night`), places
+    (`google_maps`, no prices), weather (Open-Meteo forecast ≤15 days,
+    else last year's archive for the same dates; geocoding via Nominatim
+    because Open-Meteo's geocoder maps "Goa" to Genoa/Philippines).
+    Flights/hotels need dates, otherwise return `[]`. `ToolNode(...,
+    handle_tool_errors=True)` turns API failures into error ToolMessages.
+-   `GET /me`, `GET /trips` (thread index in the store, namespace
+    `("users", uid, "threads")`, written by `TripPlanner.start`; deleted by
+    forget). SSE starts with a `started` event carrying the `thread_id`.
+-   Verified 2026-10-19: offline fake-LLM run on memory, sqlite (reopened
+    between steps) and Postgres+Redis (temporary docker containers);
+    FastAPI via TestClient (401/404/409, SSE); Open-Meteo live; SerpApi
+    parsing with synthetic payloads only (no key available).
+
+------------------------------------------------------------------------
+
+## 12e. Streamlit UI — DONE 2026-10-19
+
+`streamlit run streamlit_app.py`. The UI is **only an HTTP client** of the
+API (`app/ui/client.py`; never imports the graph), so it needs no LLM
+credentials or DB and scales separately. Its own settings
+(`app/ui/config.py`: `TRAVEL_API_URL`, optional `TRAVEL_API_KEY`,
+timeouts) are separate from `app.core.config` (which requires `ai.json`).
+Features: API-key sign-in, new trip with live SSE progress (`st.status`),
+missing-details form, review (approve / revise form with revisions left /
+reject in a confirm popover), Markdown/JSON download, sidebar trip list +
+open-by-id, retry for `incomplete`, profile + approved trips + forget.
+Shared `httpx.Client` pool via `st.cache_resource`; 401 → sign out;
+API down → clear message. Verified with `streamlit.testing.v1.AppTest`
+against a live fake-LLM API, and both containers booted from the image.
+
+------------------------------------------------------------------------
+
+## 12f. Visible research, smart revisions, trip extras — DONE 2026-10-19
+
+User report: UI showed only the itinerary; log said "Budget check skipped";
+revising "my budget is 1 lakh" changed nothing. Root causes + fixes:
+
+1.  **No dates → live flights/hotels return `[]`.** `validate_requirements`
+    (`prepare_requirements` in `nodes/validation.py`) now fills dates:
+    start+duration → end; neither → start = today + `DEFAULT_TRIP_LEAD_DAYS`
+    (30). The note goes to state `assumptions` (shown in UI, CLI, prompt).
+    Past start dates are an error. Parse prompt gets today's date and
+    reads "1 lakh" = 100000.
+2.  **Snapshot never carried research.** `TripSnapshot` now has
+    `flights, hotels, weather, activities, assumptions, costs`.
+3.  **Revise only rewrote text.** New node `apply_revision`
+    (`nodes/revision.py`): re-extracts requirements with the change
+    request, diffs fields (`changed_fields`) and routes with a `Command`:
+    research inputs changed → `Send` only the affected research agents
+    (`RESEARCH_INPUTS` map) → combine → check_budget; budget only →
+    check_budget (hotel price cap lifted); otherwise → itinerary_agent.
+4.  Currency words ("rupees") became code `RUPEES` → budget check always
+    "currency mismatch". `currency_code()` maps names/symbols; non-ISO →
+    default. Budget nights fixed: 3-day trip = 2 nights (`costing.nights`).
+
+Extras:
+-   Richer schemas (all new fields defaulted so old checkpoints load):
+    flights (airports, flight numbers, duration, stops, round_trip,
+    booking_url), hotels (class, reviews, amenities, lat/lon, image, link),
+    places (rating, reviews, address, lat/lon, image), weather `daily`
+    (`WeatherDay`, `source` forecast|historical|demo).
+-   Structured itinerary: per-day `date`, `places`, `estimated_cost`,
+    `weather_note`; plus `overview`, `getting_there` (e.g. DEL→IXC + 7 h
+    drive to Manali), `flight_choice`, `hotel_choice`, `packing_list`,
+    `tips`. Prompt gets a per-day allowance from the budget.
+-   `app/costing.py` (top-level, depends only on schemas; used by prompts,
+    graph and services): `estimate_trip_cost` → `CostBreakdown`.
+    `validate_itinerary` adds one budget error (one replan only, never
+    fails the trip) when daily spend pushes the total >5% over budget.
+-   `GET /trips/{id}/export?format=markdown|json|ics`
+    (`services/exports.py`, RFC 5545 escaping and line folding).
+-   `POST /trips/{id}/ask` trip assistant (`services/assistant.py`,
+    `prompts/assistant.py`), history passed by the client.
+-   UI: overview metrics (budget vs estimate), tabs Itinerary / Flights /
+    Hotels / Weather (charts) / Places (map) / Budget / Ask (chat) / Log,
+    lazy downloads (callable `data`), revise hints. CLI prints research and
+    costs at review.
+-   Verified: Gemini + mock (budget revise → check_budget only; dates
+    revise → flight/hotel/weather only), live SerpApi via API
+    (Delhi→Manali: IndiGo DEL→IXC, 6 hotels, 12 mapped places, exports,
+    ask), AppTest over all tabs/approve/chat.
 
 ------------------------------------------------------------------------
 
@@ -438,23 +630,21 @@ itinerary_agent → validate_itinerary ─┬─ valid → END
 
 ## 14. Known Issues / Deliberate Debt
 
-1.  `ask_user` uses blocking `input()` → replace with `interrupt()` in the
-    human-in-the-loop phase.
-2.  Mock tools return fixed data; later real APIs (specs/schemas should
-    not need to change).
-3.  No `tests/` yet. A fake LLM (object with `bind_tools()` /
-    `with_structured_output()`) patched into `get_llm` in `parsing`,
-    `itinerary` and `research_agent.nodes` runs the whole graph offline
-    (used 2026-09-29/30).
-4.  Gemini quota/transient errors: need backoff/provider fallback later.
-5.  Budget logic only re-researches hotels; activities' cost is not in
-    the estimate; flight price is treated as per person.
-6.  `cli.py` `DEFAULT_REQUEST` concatenates `"…Dubai" "for 2 people"` →
-    "Dubaifor" and lacks origin/length, so it always goes through
-    `ask_user` first (user's latest run even showed "Indiafor").
-7.  `budget_currency` default is `"USD"` when the user states no
-    currency; with INR tools that causes a "currency mismatch" skip.
-8.  The Mermaid drawing omits `Command`/`Send` edges.
+1.  No `tests/` (user chose to omit). The fake LLM (object with
+    `bind_tools()` / `with_structured_output()`) patched into `get_llm` in
+    `parsing`, `itinerary` and `research_agent.nodes` runs the whole graph
+    offline.
+2.  Gemini quota/transient errors: no provider fallback; a failed run is
+    `incomplete` and can be retried from its checkpoint (`--thread` /
+    `POST /trips/{id}/retry`).
+3.  Budget re-research only lowers hotel prices; daily spend is the LLM's
+    estimate. "Find a cheaper hotel" as a revision rewrites the itinerary
+    (it may pick a cheaper researched hotel) but does not re-search.
+4.  Assistant chat history lives in the UI session only.
+5.  SerpApi flight price basis (total vs per person) is an assumption.
+6.  Two concurrent resumes of the same thread are not locked.
+7.  The Mermaid drawing omits `Command`/`Send` edges.
+8.  No LangSmith / tracing / rate limiting (omitted by the user).
 
 ------------------------------------------------------------------------
 
@@ -472,46 +662,30 @@ after every meaningful step.
 ## 16. Current Position
 
 ``` text
-Everything through Supervisor + Send + Budget check/Command   ✅ (budget loop awaiting real Gemini run)
-Human-in-the-loop                                            ⏭ NEXT
-Checkpointing / persistence                                  ⏭
-Long-term user memory                                        ⏭
-Streaming                                                    ⏭
-Tests                                                        ⏭
-FastAPI → PostgreSQL/Redis → auth → real APIs                ⏭
-Observability / LangSmith → production hardening             ⏭
+Everything through Supervisor + Send + Budget/Command                ✅
+Human-in-the-loop (interrupt, review gate)                           ✅
+Checkpointing / persistence (memory, sqlite, postgres)               ✅
+Long-term user memory (Store)                                        ✅
+Streaming (CLI + SSE)                                                ✅
+FastAPI + auth → PostgreSQL/Redis → real APIs                        ✅
+Streamlit UI, visible research, smart revisions, costs, exports, chat ✅
+Tests                                                                omitted by user
+Observability / LangSmith → production hardening                     omitted by user
 ```
 
 ------------------------------------------------------------------------
 
 ## 17. NEXT SESSION — Start Here
 
-**Step 0 (quick, user action):** run `python3 main.py` with flights
-booked, 8 days and a budget of ₹40,000 and confirm the over-budget loop
-in §11 fires. Open question the user was asked (answer it if they have
-not): *after the hotel re-run, why does `hotel_research →
-combine_research` lead back into `check_budget` instead of the
-itinerary, and what changes if we add an edge from `hotel_research`
-straight to `itinerary_agent`?* (Answer: the fixed edge re-enters
-`combine_research → check_budget`, so the new hotel result is re-priced
-and the retry guard ends the loop; a direct edge would skip the check
-and would also make the initial pass skip the budget check.)
+The roadmap is complete except the two items the user omitted. Useful next
+steps if the user wants to continue:
 
-**Step 1: Human-in-the-Loop with `interrupt()`.**
-
--   Replace `ask_user`'s `input()` with `interrupt({...})` and resume
-    with `Command(resume=...)`.
--   This **requires a checkpointer** (start with `InMemorySaver`) and a
-    `thread_id` in the run config — so introduce checkpointing minimally
-    here, then deepen it next.
--   Add an itinerary approval gate: after a valid itinerary, interrupt
-    for approve / request changes; changes route back to
-    `itinerary_agent` (or re-research) with `user_feedback`.
--   Update `app/cli.py` to loop: invoke → detect `__interrupt__` →
-    prompt via `app/core/console.py` → resume.
--   Keep `input()` out of graph code (console helper only).
--   Test offline with the fake LLM first.
-
-Then: persistent checkpointing (SQLite/Postgres saver), long-term
-memory, streaming, tests (`tests/` with the fake LLM), and only then
-FastAPI/databases/real APIs.
+1.  Walk the user through the 2026-10-19 concepts (§5) using the code,
+    one at a time: `interrupt` → checkpointer/thread → `get_state` →
+    Store/Runtime → streaming modes.
+2.  Confirm the SerpApi flight price basis (§12d) against Google Flights.
+3.  Ideas: price alerts, multi-city trips, visa/advisory lookups.
+4.  Postgres in practice: `docker compose up -d`,
+    `PERSISTENCE_BACKEND=postgres`,
+    `DATABASE_URL=postgresql://travel:travel@localhost:5433/travel_planner`
+    (5433 because a local Postgres already uses 5432).
